@@ -1,7 +1,7 @@
 
 # This script does dithering for a given source.
 # Author: Tolga Yapici
-# email: tyapici[at]pa.msu.edu
+# email: tyapici[at]ur.rochester.edu
 
 #
 # TODO:
@@ -50,6 +50,7 @@ class dithering:
         self.wlen_grid   = np.linspace(wavelength.data[0], wavelength.data[-1], self.num_wlen) * wlen_unit
         self.pointing    = self.desi.observation.pointing
         self.place_fiber([0., 0.])
+        self.angle       = 0
 
     """
     Function to generate a single source
@@ -255,6 +256,8 @@ class dithering:
     def report(self):
         print("Current boresight position is: {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
         print("Current source position is: {0:.3f} , {1:.3f}".format(self.alt, self.az))
+        print("Current fiber position is: {0:.3f} , {1:.3f}".format(self.fiber_x[0], self.fiber_y[0]))
+        print("Current focal plane position is: {0:.3f} , {1:.3f}".format(self.focal_x[0], self.focal_y[0]))
         print("A fiber placement offset of {0} um is added to simuation".format(self.fiber_placement))
         print("With the current configuration, SNR are:")
         for camera_name in self.SNR:
@@ -275,6 +278,17 @@ class dithering:
         self.fiber_x = self.focal_x
         self.fiber_y = self.focal_y
 
+    """
+    Function to change the boresight position. This is done by the following transformation.
+    The transformation may not be correct. Need to consult David Kirkby
+    
+    Parameters
+    ----------
+    alt_bore : float
+        new boresight altitude angle in degrees (unit needs to be provided)
+    az_bore : float
+        new boresight azimuth angle in degrees (unit needs to be provided)
+    """
     def change_alt_az_bore_position(self, alt_bore, az_bore):
         prev_focal_x = self.fiber_x
         prev_focal_y = self.fiber_y
@@ -282,3 +296,22 @@ class dithering:
         self.fiber_placement = [focal_x.to(u.um).value - prev_focal_x.to(u.um).value, focal_y.to(u.um).value - prev_focal_y.to(u.um).value]
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
         self.focal_y = [(focal_y.to(u.mm).value)]*u.mm
+        self.set_boresight_position(alt_bore, az_bore)
+
+    """
+    Function to rotate the position on the 2nd axis. The rotation is done for $\theta_2$ only for now
+    
+    Parameters
+    ----------
+    angle : float
+        rotation angle in degrees (unit needs to be provided)
+    """ 
+    def rotate_positioner(self, angle):
+        radius = 3*u.mm
+        angle  = angle.to(u.rad).value
+        delta_x = (radius * np.cos(self.angle)).to(u.um) - (radius * np.cos(self.angle+angle)).to(u.um)
+        delta_y = (radius * np.sin(self.angle)).to(u.um) - (radius * np.sin(self.angle+angle)).to(u.um)
+        self.angle   = self.angle + angle
+        self.fiber_x = self.fiber_x + delta_x
+        self.fiber_y = self.fiber_y + delta_y
+        self.fiber_placement = [self.fiber_placement[0]-delta_x.value, self.fiber_placement[1]-delta_y.value]
