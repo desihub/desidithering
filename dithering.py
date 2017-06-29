@@ -253,8 +253,8 @@ class dithering:
             self.report()
         
     def report(self):
-        print("Current boresight position is: {0} , {1}".format(self.alt_bore, self.az_bore))
-        print("Current source position is: {0} , {1}".format(self.alt, self.az))
+        print("Current boresight position is: {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
+        print("Current source position is: {0:.3f} , {1:.3f}".format(self.alt, self.az))
         print("A fiber placement offset of {0} um is added to simuation".format(self.fiber_placement))
         print("With the current configuration, SNR are:")
         for camera_name in self.SNR:
@@ -272,10 +272,12 @@ class dithering:
         focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, self.alt_bore, self.az_bore, platescale=1*u.mm/u.deg))
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
         self.focal_y = [(focal_y.to(u.mm).value)]*u.mm
+        self.fiber_x = self.focal_x
+        self.fiber_y = self.focal_y
 
     def change_alt_az_bore_position(self, alt_bore, az_bore):
-        prev_focal_x = self.focal_x
-        prev_focal_y = self.focal_y
+        prev_focal_x = self.fiber_x
+        prev_focal_y = self.fiber_y
         focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, alt_bore, az_bore, platescale=1*u.mm/u.deg))
         self.fiber_placement = [focal_x.to(u.um).value - prev_focal_x.to(u.um).value, focal_y.to(u.um).value - prev_focal_y.to(u.um).value]
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
