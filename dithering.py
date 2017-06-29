@@ -3,18 +3,23 @@
 # Author: Tolga Yapici
 # email: tyapici[at]pa.msu.edu
 
+#
+# TODO:
+# 1. rotate the fiber along an axis mimicing the positioners
+# 2. ???
+
 # general packages
 import os
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-
 import astropy.units as u
 import astropy.table
-
 import scipy
 
 # specsim (DESI related packages)
+# some of them are probably not being used in this module
+# these will be cleaned up later
 import specsim
 import specsim.quickspecsim as qspecsim
 import specsim.instrument as inst
@@ -26,16 +31,17 @@ import specsim.simulator as sim
 import specsim.atmosphere as atm
 import specsim.transform as trans
 
-# TODO:
-#  1. transform package will be used later for source and boring positions
-#  2. ...
-#
-
 class dithering:
+    """
+    Initialize a dithering module
 
-    def __init__(self, telescope_az=0., telescope_lat=0.,
-                 source_az=0., source_lat=0.,
-                 config_file="./config/desi-blur-offset.yaml"):
+    Parameters
+    ----------
+    config_file : string
+        The configuration filename with the parameters for fiber acceptance
+        and other related calculations
+    """
+    def __init__(self, config_file="./config/desi-blur-offset.yaml"):
         self.config_file = config_file
         self.desi        = sim.Simulator(self.config_file, num_fibers=1)
         wavelength       = self.desi.simulated['wavelength']
@@ -44,13 +50,34 @@ class dithering:
         self.wlen_grid   = np.linspace(wavelength.data[0], wavelength.data[-1], self.num_wlen) * wlen_unit
         self.pointing    = self.desi.observation.pointing
         self.place_fiber([0., 0.])
-        
-    # function to generate a single source
-    # function is only for generating the source profile parameters
-    # it does not have anything about the source type
-    # source type will be defined/assigned later
-    # the default profile is a point source
-    # FINISHED
+
+    """
+    Function to generate a single source
+    Function is only for generating the source profile parameters
+    it does not have anything about the source type explicitly
+    the default profile is a point source QSO
+
+    Parameters
+    ----------
+    disk_fraction : 
+    
+    bulge_fraction :
+    
+    vary : 
+    
+    minormajor : 
+    
+    Returns
+    -------
+    source_fraction :
+    
+    source_half_light_radius :
+    
+    source_minor_major_axis : 
+    
+    source_position_angle : 
+
+    """
     def generate_source(self, disk_fraction=0., bulge_fraction=0., vary='', seed=23, minormajor=[1,1]):
         gen = np.random.RandomState(seed)
         varied = vary.split(',')
@@ -63,14 +90,27 @@ class dithering:
             source_position_angle = np.tile([0., 0.], (1, 1))
         return source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle
 
-    # function to place a fiber on focal plane
-    # when calculating the fiber acceptance fraction, this becomes important
-    # FINISHED
+    """
+    Function to place a fiber on focal plane
+    when calculating the fiber acceptance fraction, this becomes important
+    
+    Parameters
+    ----------
+    fiber_placement: array
+        position of the fiber with respect to focal x and focal y
+
+    Returns
+    -------
+    None
+    """
     def place_fiber(self, fiber_placement):
         self.fiber_placement = fiber_placement
-    
-    # function to create the object with galsim parameters
-    # FINISHED
+
+    """
+    Function to create the object with galsim parameters
+    This function is probably not needed and possible be removed
+    That is why no further information is provded here
+    """
     def calculateFiberLoss(self, num_pixels=16, oversampling=32, moffat_beta=3.5):
         self.num_pixels   = num_pixels
         self.oversampling = oversampling
@@ -81,16 +121,29 @@ class dithering:
                                                                     moffat_beta=self.moffat_beta,
                                                                     fiber_placement=self.fiber_placement)
         
-    # function to return the source type dependent desi-model fiber loss
-    # FINISHED
+    """
+    Function to return the source type dependent desi-model fiber loss
+    
+    Parameters
+    ----------
+    obj_type : string
+        source type: 'qso', 'elg', 'lrg'
+    Returns
+    -------
+    t : table
+        table with the expected fiber acceptance for a given source type
+    """
     def get_desimodel_fiberloss(self, obj_type='qso'):
         path = os.path.join(os.environ['DESIMODEL'], 'data', 'throughput',
                             'fiberloss-{0}.dat'.format(obj_type))
         t = astropy.table.Table.read(path, format='ascii', names=['wlen', 'accept'])
         return t
 
-    # ...
-    # FINISHED
+    """
+    Function to evaluate the fiber acceptance given the parameter set
+    This function is probably not needed and possible be removed
+    That is why no further information is provded here
+    """
     def get_fiberloss(self, source_fraction, source_half_light_radius,
                       source_minor_major_axis_ratio, source_position_angle,
                       seeing=1.1*u.arcsec, images_filename=None):
@@ -108,12 +161,25 @@ class dithering:
                                                    source_minor_major_axis_ratio, source_position_angle,
                                                    saved_images_file=None)
 
-    # ...
-    # FINISHED
-    def generate_fiber_positions(self, nfiber=5000, seed=123):
+    """
+    Function to generate a random position for a fiber
+    This function is not probably going to be too useful once we one to check the real source positions and 
+    fiber assignments. This is just a placeholder for now just in case some wants to play with random fibers
+    
+    Parameters
+    ----------
+    seed : int
+        seed for random number generator
+    
+    Returns
+    -------
+    None
+    but sets up some of the variables of the class
+    """
+    def generate_fiber_positions(self, seed=123):
         gen = np.random.RandomState(seed)
-        focal_r = (np.sqrt(gen.uniform(size=nfiber)) * self.desi.instrument.field_radius)
-        phi = 2 * np.pi * gen.uniform(size=nfiber)
+        focal_r = (np.sqrt(gen.uniform(size=1)) * self.desi.instrument.field_radius)
+        phi = 2 * np.pi * gen.uniform(size=1)
         # focal x and y location calculated here
         self.focal_x = np.cos(phi) * focal_r
         self.focal_y = np.sin(phi) * focal_r
@@ -124,6 +190,28 @@ class dithering:
         self.original_focal_x = self.focal_x
         self.original_focal_y = self.focal_y
 
+    """
+    Function to get fiber acceptance fraction as a function of wavelength given the parameters
+    fiber_acceptance_fraction is later used in the simulation for getting the SNR and some other
+    variables
+    
+    Parameters
+    ----------
+    source_type : string
+
+    source_fraction : array
+
+    source_half_light_radius : array
+
+    source_minor_major_axis_ratio : array
+
+    source_position_angle : array
+
+    
+    Returns
+    -------
+    None but generates self.fiber_acceptance_fraction
+    """
     def get_fiber_acceptance_fraction(self, source_type, source_fraction, source_half_light_radius,
                                       source_minor_major_axis_ratio, source_position_angle):
         self.fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(self.focal_x, self.focal_y, self.wlen_grid,
@@ -132,18 +220,45 @@ class dithering:
                                                                                    source_minor_major_axis_ratio,
                                                                                    source_position_angle, fiber_placement=self.fiber_placement)
 
+
+    """
+    Function to run the simulation with all the parameters defined/given
+
+    Parameters
+    ----------
+    source_type : string
+
+    source_fraction : array
+
+    source_half_light_radius : array
+
+    source_minor_major_axis_ratio : array
+
+    source_position_angle : array
+    
+    report : bool
+        Prints out a report about the results
+
+    """
     def run_simulation(self, source_type, source_fraction, source_half_light_radius,
                        source_minor_major_axis_ratio, source_position_angle, report=True):
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
+        self.SNR = {}
+        for output in self.desi.camera_output:
+            snr = (output['num_source_electrons'][:, 0]/
+                   np.sqrt(output['variance_electrons'][:, 0]))
+            self.SNR[output.meta['name']] = [snr, output.meta['pixel_size']]
         if report:
             self.report()
         
     def report(self):
-        for output in self.desi.camera_output:
-            snr = (output['num_source_electrons'][:, 0]/
-                   np.sqrt(output['variance_electrons'][:, 0]))
-            print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
+        print("Current boresight position is: {0} , {1}".format(self.alt_bore, self.az_bore))
+        print("Current source position is: {0} , {1}".format(self.alt, self.az))
+        print("A fiber placement offset of {0} um is added to simuation".format(self.fiber_placement))
+        print("With the current configuration, SNR are:")
+        for camera_name in self.SNR:
+            print("-- camera {0}: {1:.3f} / {2}".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
 
     def set_source_position(self, alt, az):
         self.alt = alt
@@ -165,99 +280,3 @@ class dithering:
         self.fiber_placement = [focal_x.to(u.um).value - prev_focal_x.to(u.um).value, focal_y.to(u.um).value - prev_focal_y.to(u.um).value]
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
         self.focal_y = [(focal_y.to(u.mm).value)]*u.mm
-
-"""        
-dit = dithering()
-dit.set_source_position(20.*u.deg, 25.*u.deg)
-dit.set_boresight_position(20.*u.deg, 24.5*u.deg)
-dit.get_focal_plane_position()
-source = dit.generate_source()
-dit.place_fiber([0., 0.])
-t = dit.get_desimodel_fiberloss('qso')
-plt.plot(t['wlen'], t['accept'], 'r--', lw=2, label='desimodel')
-# first put the fiber in the middle with no dithering
-dit.calculateFiberLoss()
-fiber_loss = dit.get_fiberloss(*source)
-plt.plot(dit.wlen_grid, fiber_loss.flatten(), label="$\Delta$x=0 um")
-print(dit.fiber_placement)
-print(dit.focal_x, dit.focal_y)
-dit.run_simulation('qso', *source, report=True)
-
-dit.change_alt_az_bore_position(20.*u.deg, 24.45*u.deg)
-print(dit.fiber_placement)
-print(dit.focal_x, dit.focal_y)
-dit.run_simulation('qso', *source, report=True)
-"""
-
-
-
-"""
-fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(dit.focal_x, dit.focal_y,
-                                                                      dit.wlen_grid, dit.desi.source, dit.desi.atmosphere,
-                                                                      dit.desi.instrument, 'qso', *source)
-dit.desi.simulate(fiber_acceptance_fraction=fiber_acceptance_fraction)
-print("no movement")
-for output in dit.desi.camera_output:
-    snr = (output['num_source_electrons'][:, 0]/
-           np.sqrt(output['variance_electrons'][:, 0]))
-    print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
-
-
-fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(dit.focal_x, dit.focal_y,
-                                                                      dit.wlen_grid, dit.desi.source, dit.desi.atmosphere,
-                                                                      dit.desi.instrument, 'qso', *source, fiber_placement=[0., 5.])
-dit.desi.simulate(fiber_acceptance_fraction=fiber_acceptance_fraction)
-print("some movement")
-for output in dit.desi.camera_output:
-    snr = (output['num_source_electrons'][:, 0]/
-           np.sqrt(output['variance_electrons'][:, 0]))
-    print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
-
-
-fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(dit.focal_x, dit.focal_y,
-                                                                      dit.wlen_grid, dit.desi.source, dit.desi.atmosphere,
-                                                                      dit.desi.instrument, 'qso', *source, fiber_placement=[0., 120.])
-dit.desi.simulate(fiber_acceptance_fraction=fiber_acceptance_fraction)
-print("lots of movement")
-for output in dit.desi.camera_output:
-    snr = (output['num_source_electrons'][:, 0]/
-           np.sqrt(output['variance_electrons'][:, 0]))
-    print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
-
-
-
-interpolator = scipy.interpolate.interp1d(dit.wlen_grid.value, fiber_loss, kind='linear', axis=1,
-                                          copy=False, assume_sorted=True)
-print(interpolator(dit.wlen_grid).flatten())
-print(interpolator(dit.wlen_grid).flatten().shape)
-print(dit.wlen_grid)
-# Both wavelength grids have the same units, by construction, so no                                                                                      
-# conversion factor is required here.
-fiber_acceptance_fraction = np.array( interpolator(dit.wlen_grid) )
-print(fiber_acceptance_fraction)
-print(type(fiber_acceptance_fraction))
-dit.desi.simulate(fiber_acceptance_fraction=[fiber_acceptance_fraction]) #np.array(interpolator(dit.wlen_grid).flatten()))
-print("no movement")
-for output in dit.desi.camera_output:
-    snr = (output['num_source_electrons'][:, 0]/
-           np.sqrt(output['variance_electrons'][:, 0]))
-    print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
-# then start moving the fiber until all the fiber is out
-# we only move the fiber in x-direction here in increments of 15 um
-for i in range(15, 120, 15):
-    dit.place_fiber([i, 0])
-    dit.calculateFiberLoss()
-    fiber_loss = dit.get_fiberloss(*source)
-    plt.plot(dit.wlen_grid, fiber_loss.flatten(), label="$\Delta$x=%d um"%i)
-    dit.desi.simulate(fiber_acceptance_fraction=fiber_loss)
-    print("delta-x: ", i)
-    for output in dit.desi.camera_output:
-        snr = (output['num_source_electrons'][:, 0]/
-               np.sqrt(output['variance_electrons'][:, 0]))
-        print("-- camera {0}: {1:.3f} / {2}".format(output.meta['name'], np.median(snr), output.meta['pixel_size']))
-legend = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-plt.xlabel("Wavelength")
-plt.ylabel("Acceptance")
-plt.savefig("example.pdf", bbox_extra_artists=(legend,), bbox_inches='tight')
-"""
-
