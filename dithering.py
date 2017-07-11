@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 import astropy.table
 import scipy
+import random
 
 # specsim (DESI related packages)
 # some of them are probably not being used in this module
@@ -41,8 +42,9 @@ class dithering:
         The configuration filename with the parameters for fiber acceptance
         and other related calculations
     """
-    def __init__(self, config_file="./config/desi-blur-offset.yaml"):
+    def __init__(self, config_file="./config/desi-blur.yaml", verbose=False):
         self.config_file = config_file
+        cfg = specsim.config.load_config(self.config_file)
         self.desi        = sim.Simulator(self.config_file, num_fibers=1)
         wavelength       = self.desi.simulated['wavelength']
         wlen_unit        = wavelength.unit
@@ -50,8 +52,17 @@ class dithering:
         self.wlen_grid   = np.linspace(wavelength.data[0], wavelength.data[-1], self.num_wlen) * wlen_unit
         self.pointing    = self.desi.observation.pointing
         self.place_fiber([0., 0.])
+        self.radius      = 3*u.mm
+        self.theta       = 0*u.deg
+        self.phi         = 0*u.deg
+        self.theta_0     = 0*u.deg
+        self.phi_0       = 0*u.deg
+        self.prev_theta  = 0*u.deg
+        self.prev_phi    = 0*u.deg
         self.angle       = 0
-
+        self.platescale  = cfg.get_constants(cfg.instrument.plate_scale, ['value'])['value']
+        self.verbose     = verbose
+        
     """
     Function to generate a single source
     Function is only for generating the source profile parameters
@@ -251,17 +262,18 @@ class dithering:
                    np.sqrt(output['variance_electrons'][:, 0]))
             self.SNR[output.meta['name']] = [snr, output.meta['pixel_size']]
         if report:
-            self.report()
+            self.report(simple=False)
         
-    def report(self):
-        print("Current boresight position is: {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
-        print("Current source position is: {0:.3f} , {1:.3f}".format(self.alt, self.az))
-        print("Current fiber position is: {0:.3f} , {1:.3f}".format(self.fiber_x[0], self.fiber_y[0]))
-        print("Current focal plane position is: {0:.3f} , {1:.3f}".format(self.focal_x[0], self.focal_y[0]))
-        print("A fiber placement offset of {0} um is added to simuation".format(self.fiber_placement))
-        print("With the current configuration, SNR are:")
-        for camera_name in self.SNR:
-            print("-- camera {0}: {1:.3f} / {2}".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
+    def report(self, simple=True):
+        print("boresight position is   : {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
+        print("source position is      : {0:.3f} , {1:.3f}".format(self.alt, self.az))
+        print("fiber position is       : {0:.3f} , {1:.3f}".format(self.fiber_x[0], self.fiber_y[0]))
+        print("focal plane position is : {0:.3f} , {1:.3f}".format(self.focal_x[0], self.focal_y[0]))
+        print("fiber placement         : {0} um, {1} um".format(self.fiber_placement[0], self.fiber_placement[1]))
+        if not simple:
+            print("With the current configuration, SNR are:")
+            for camera_name in self.SNR:
+                print("-- camera {0}: {1:.3f} / {2}".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
 
     def set_source_position(self, alt, az):
         self.alt = alt
@@ -272,12 +284,18 @@ class dithering:
         self.az_bore = az
 
     def set_focal_plane_position(self):
-        focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, self.alt_bore, self.az_bore, platescale=1*u.mm/u.deg))
+        focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, self.alt_bore, self.az_bore, platescale=self.platescale))
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
         self.focal_y = [(focal_y.to(u.mm).value)]*u.mm
         self.fiber_x = self.focal_x
         self.fiber_y = self.focal_y
-
+        self.fiber_placement = [self.focal_x.to(u.um).value-self.fiber_x.to(u.um).value, 
+                                self.focal_y.to(u.um).value-self.fiber_y.to(u.um).value]
+        self.theta      = 0*u.deg
+        self.prev_theta = 0*u.deg
+        self.phi        = 0*u.deg
+        self.prev_phi   = 0*u.deg
+        
     """
     Function to change the boresight position. This is done by the following transformation.
     The transformation may not be correct. Need to consult David Kirkby
@@ -290,23 +308,25 @@ class dithering:
         new boresight azimuth angle in degrees (unit needs to be provided)
     """
     def change_alt_az_bore_position(self, alt_bore, az_bore):
+        #platescale   = 70.3947#self.desi.instrument.plate_scale
         prev_focal_x = self.fiber_x
         prev_focal_y = self.fiber_y
-        focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, alt_bore, az_bore, platescale=1*u.mm/u.deg))
-        self.fiber_placement = [focal_x.to(u.um).value - prev_focal_x.to(u.um).value, focal_y.to(u.um).value - prev_focal_y.to(u.um).value]
+        focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, alt_bore, az_bore, platescale=self.platescale))#*u.mm/u.deg))
+        self.fiber_placement = [focal_x.to(u.um).value - self.fiber_x.to(u.um).value, focal_y.to(u.um).value - self.fiber_y.to(u.um).value]
+        #[focal_x.to(u.um).value - prev_focal_x.to(u.um).value, focal_y.to(u.um).value - prev_focal_y.to(u.um).value]
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
         self.focal_y = [(focal_y.to(u.mm).value)]*u.mm
         self.set_boresight_position(alt_bore, az_bore)
 
     """
-    Function to rotate the position on the 2nd axis. The rotation is done for $\theta_2$ only for now
+    Function to rotate the position on the 2nd axis. The rotation is done for $\Phi$ only for now
     
     Parameters
     ----------
     angle : float
         rotation angle in degrees (unit needs to be provided)
     """ 
-    def rotate_positioner(self, angle):
+    def rotate_positioner_r2(self, angle):
         radius = 3*u.mm
         angle  = angle.to(u.rad).value
         delta_x = (radius * np.cos(self.angle)).to(u.um) - (radius * np.cos(self.angle+angle)).to(u.um)
@@ -315,3 +335,61 @@ class dithering:
         self.fiber_x = self.fiber_x + delta_x
         self.fiber_y = self.fiber_y + delta_y
         self.fiber_placement = [self.fiber_placement[0]-delta_x.value, self.fiber_placement[1]-delta_y.value]
+
+    """
+    Function to rotate the position on the 1st axis. The rotation is done for $\Theta$ only for now
+    
+    Parameters
+    ----------
+    angle : float
+        rotation angle in degrees (unit needs to be provided)
+    """ 
+    def rotate_positioner_r1(self, angle):
+        radius = 3*u.mm
+        angle  = angle.to(u.rad).value
+        delta_x = (radius * np.cos(self.angle)).to(u.um) - (radius * np.cos(self.angle+angle)).to(u.um)
+        delta_y = (radius * np.sin(self.angle)).to(u.um) - (radius * np.sin(self.angle+angle)).to(u.um)
+        self.angle   = self.angle + angle
+        self.fiber_x = self.fiber_x + delta_x
+        self.fiber_y = self.fiber_y + delta_y
+        self.fiber_placement = [self.fiber_placement[0]-delta_x.value, self.fiber_placement[1]-delta_y.value]
+
+    def set_positioner_theta(self, angle):
+        self.prev_theta = self.theta
+        self.theta      = angle
+        if self.verbose:
+            print("[INFO] positioner theta was {0}".format(self.prev_theta))
+            print("[INFO] positioner theta changed to {0}".format(self.theta))
+        
+    def set_positioner_phi(self, angle):
+        self.prev_phi = self.phi
+        self.phi      = angle
+
+    def make_positioner_rotation(self):
+        prev_x = self.radius * np.cos(self.prev_theta.to(u.rad).value) + self.radius * np.cos(self.prev_phi.to(u.rad).value)
+        x      = self.radius * np.cos(self.theta.to(u.rad).value) + self.radius * np.cos(self.phi.to(u.rad).value)
+        prev_y = self.radius * np.sin(self.prev_theta.to(u.rad).value) + self.radius * np.sin(self.prev_phi.to(u.rad).value)
+        y      = self.radius * np.sin(self.theta.to(u.rad).value) + self.radius * np.sin(self.phi.to(u.rad).value)
+        delta_x = (x - prev_x).to(u.um)
+        delta_y = (y - prev_y).to(u.um)
+        self.fiber_x = self.fiber_x + delta_x
+        self.fiber_y = self.fiber_y + delta_y
+        #self.fiber_placement = [self.fiber_placement[0]+delta_x.value, self.fiber_placement[1]+delta_y.value]
+        self.fiber_placement = [self.focal_x.to(u.um).value-self.fiber_x.to(u.um).value, 
+                                self.focal_y.to(u.um).value-self.fiber_y.to(u.um).value]
+        return
+
+    def add_random_offset_fiber_position(self, mean_x=0*u.um, var_x=1*u.um, mean_y=0*u.um, var_y=1*u.um):
+        random_offset_x = random.gauss(mean_x, var_x)
+        random_offset_y = random.gauss(mean_y, var_y)
+        self.fiber_x = self.fiber_x + random_offset_x
+        self.fiber_y = self.fiber_y + random_offset_y
+        self.fiber_placement = [self.fiber_placement[0] + random_offset_x.to(u.um).value,
+                                self.fiber_placement[1] + random_offset_y.to(u.um).value]
+
+    def add_random_boresight_offset(self, mean_alt=0*u.arcsec, var_alt=1*u.arcsec, mean_az=0*u.arcsec, var_az=1*u.arcsec):
+        random_offset_alt = random.gauss(mean_alt, var_alt)
+        random_offset_az  = random.gauss(mean_az, var_az)
+        self.alt_bore = self.alt_bore + random_offset_alt
+        self.az_bore  = self.az_bore + random_offset_az
+        self.change_alt_az_bore_position(self.alt_bore, self.az_bore)
