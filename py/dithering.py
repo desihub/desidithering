@@ -42,7 +42,7 @@ class dithering:
         The configuration filename with the parameters for fiber acceptance
         and other related calculations
     """
-    def __init__(self, config_file="./config/desi-blur.yaml", verbose=False):
+    def __init__(self, config_file="../config/desi-blur.yaml", verbose=False):
         self.config_file = config_file
         cfg = specsim.config.load_config(self.config_file)
         self.desi        = sim.Simulator(self.config_file, num_fibers=1)
