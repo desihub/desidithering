@@ -135,8 +135,8 @@ matrix:
 
         # Check for sphinx doc build warnings - we do this first because it
         # runs for a long time
-	# this part is commented because there is no documentation for now
-	# - os: linux
+        # this part is commented because there is no documentation for now
+        # - os: linux
         #  env: PYTHON_VERSION=3.5 SETUP_CMD='build_sphinx --warning-is-error'
 
           # OPTIONAL_DEPS needed because the plot_directive in sphinx needs them
