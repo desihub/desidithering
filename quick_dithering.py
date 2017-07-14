@@ -56,8 +56,14 @@ for i in range(1, num_sources+1):
         half_light_radius = sources_info[i]['half_light_radius']
         source    = dithering.generate_source(disk_fraction=0., bulge_fraction=1., half_light_disk=0., half_light_bulge=half_light_radius)
     alt, az = sources_info[i]['source_position']
+    theta_0, phi_0 = sources_info[i]['positioner_initials']
     dithering.set_source_position(alt*u.deg, az*u.deg)
     dithering.set_focal_plane_position()
+    dithering.set_theta_0(theta_0*u.deg)
+    dithering.set_phi_0(phi_0*u.deg)
+    dithering.run_simulation(source_type, *source, report=True)
+    dithering.set_positioner_theta(0.5*u.deg)
+    dithering.make_positioner_rotation()
     dithering.run_simulation(source_type, *source, report=True)
     
 """

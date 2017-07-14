@@ -368,10 +368,10 @@ class dithering:
         self.phi      = angle
 
     def make_positioner_rotation(self):
-        prev_x = self.radius * np.cos(self.prev_theta.to(u.rad).value) + self.radius * np.cos(self.prev_phi.to(u.rad).value)
-        x      = self.radius * np.cos(self.theta.to(u.rad).value) + self.radius * np.cos(self.phi.to(u.rad).value)
-        prev_y = self.radius * np.sin(self.prev_theta.to(u.rad).value) + self.radius * np.sin(self.prev_phi.to(u.rad).value)
-        y      = self.radius * np.sin(self.theta.to(u.rad).value) + self.radius * np.sin(self.phi.to(u.rad).value)
+        prev_x = self.radius * np.cos(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.cos(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        x      = self.radius * np.cos(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.cos(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        prev_y = self.radius * np.sin(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.sin(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        y      = self.radius * np.sin(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.sin(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
         delta_x = (x - prev_x).to(u.um)
         delta_y = (y - prev_y).to(u.um)
         self.fiber_x = self.fiber_x + delta_x
@@ -395,3 +395,9 @@ class dithering:
         self.alt_bore = self.alt_bore + random_offset_alt
         self.az_bore  = self.az_bore + random_offset_az
         self.change_alt_az_bore_position(self.alt_bore, self.az_bore)
+
+    def set_theta_0(self, angle):
+        self.theta_0 = angle
+
+    def set_phi_0(self, angle):
+        self.phi_0 = angle
