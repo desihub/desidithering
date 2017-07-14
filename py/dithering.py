@@ -90,18 +90,20 @@ class dithering:
     source_position_angle : 
 
     """
-    def generate_source(self, disk_fraction=0., bulge_fraction=0., vary='', seed=23, minormajor=[1,1]):
+    def generate_source(self, disk_fraction=0., bulge_fraction=0., vary='', seed=23, minormajor=[1,1], half_light_disk=0., half_light_bulge=0.):
         gen = np.random.RandomState(seed)
         varied = vary.split(',')
         source_fraction = np.tile([disk_fraction, bulge_fraction], (1, 1))
-        source_half_light_radius = np.tile([0.45, 1.0], (1, 1))
+        source_half_light_radius = np.tile([half_light_disk, half_light_bulge], (1, 1))
         source_minor_major_axis_ratio = np.tile(minormajor, (1, 1))
         if 'pa' in varied:
             source_position_angle = 360. * gen.uniform(size=(1, 2))
         else:
             source_position_angle = np.tile([0., 0.], (1, 1))
         return source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle
+    
 
+    
     """
     Function to place a fiber on focal plane
     when calculating the fiber acceptance fraction, this becomes important

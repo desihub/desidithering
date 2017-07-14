@@ -1,0 +1,31 @@
+sources:
+  num_sources: 5
+  1:
+    source_type: qso
+    source_position: [20.0, 24.5]
+  2:
+    source_type: elg
+    half_light_radius: 0.5
+    source_position: [20.0, 24.25]
+  3:
+    source_type: elg
+    half_light_radius: 4.0
+    source_position: [20.5, 24.5]
+  4:
+    source_type: lrg
+    half_light_radius: 0.5
+    source_position: [20.10, 24.2]
+  5:
+    source_type: lrg
+    half_light_radius: 4.0
+    source_position: [20.05, 25.5]
+
+telescope:
+  offsets: True
+  random_offsets: False
+  scale: False
+  telescope_boresight: [20.0, 24.5]
+  
+dithering:
+  telescope_dithering: False
+  positioner_dithering: True
