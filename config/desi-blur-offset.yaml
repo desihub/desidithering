@@ -78,7 +78,7 @@ atmosphere:
             format: ascii.basic
         constants:
             # Phase of the moon from 0 (full) to 1 (new).
-            moon_phase: 0.5
+            moon_phase: 1.0
             # Zenith angles of the moon. An angle > 90 (below the horizon)
             # will zero the scattered moon contribution.
             moon_zenith: 100 deg
@@ -130,7 +130,10 @@ instrument:
         # Read RMS blur values tabulated as a function of field angle and
         # wavelength, and derived from ray tracing simulations.  For details,
         # see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
-        path: throughput/DESI-0347_blur.ecsv
+        # -> this one is for no blue
+        #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_noblur.ecsv
+        # -> this one if for blur
+        path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
         format: ascii.ecsv
     offset:
@@ -146,7 +149,7 @@ instrument:
         # Read random achromatic centroid offsets from a FITS file.
         # Uncomment any one of these lines to select a different random set.
         # No random offsets are applied if all lines are commented out.
-        random: throughput/DESI-0347_random_offset_1.fits
+        #random: throughput/DESI-0347_random_offset_1.fits
         #random: throughput/DESI-0347_random_offset_2.fits
         #random: throughput/DESI-0347_random_offset_3.fits
     cameras:
@@ -279,9 +282,11 @@ source:
                 unit: 1e-17 erg / (Angstrom cm2 s)
     # Transverse profile of the source on the sky, used to calculate the
     # fiberloss fraction when instrument.fiberloss.method = galsim (but
-    # ignored otherwise).
+    # ignored otherwise)
+    # these are over-written with the values in the other main config file.
+    # however the logic needs to stay (disk_fraction+bulge_fraction)<=1.0
     profile:
-        disk_fraction: 1.0
+        disk_fraction: 0.0
         bulge_fraction: 0.0
         disk_shape:
             half_light_radius: 0.45 arcsec
@@ -318,7 +323,7 @@ source:
 observation:
     observatory: KPNO
     constants:
-        exposure_time: 10000.0 s
+        exposure_time: 1800.0 s
         # Atmospheric pressure at the telescope (not at sea level) used
         # to calculate atmospheric refraction.  Leave commented out to use a
         # nominal value calculated for the observatory elevation.

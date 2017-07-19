@@ -42,7 +42,7 @@ class dithering:
         The configuration filename with the parameters for fiber acceptance
         and other related calculations
     """
-    def __init__(self, config_file="../config/desi-blur.yaml", verbose=False):
+    def __init__(self, config_file="../config/desi-blur.yaml", verbose=False, output_file=None):
         self.config_file = config_file
         cfg = specsim.config.load_config(self.config_file)
         self.desi        = sim.Simulator(self.config_file, num_fibers=1)
@@ -62,6 +62,11 @@ class dithering:
         self.angle       = 0
         self.platescale  = cfg.get_constants(cfg.instrument.plate_scale, ['value'])['value']
         self.verbose     = verbose
+        self.output_file = output_file
+        if self.output_file is not None:
+            f = open(self.output_file, "w")
+            f.write("Output generated at : \n")
+            f.close()
         
     """
     Function to generate a single source
@@ -167,6 +172,7 @@ class dithering:
         # Tabulate seeing.
         self.desi.atmosphere.seeing_fwhm_ref = seeing
         seeing_fwhm = self.desi.atmosphere.get_seeing_fwhm(self.wlen_grid).to(u.arcsec).value
+        print(seeing_fwhm)
         # Calculate optics.
         scale, blur, offset = self.desi.instrument.get_focal_plane_optics(self.focal_x, self.focal_y, self.wlen_grid)
         # Do the fiberloss calculations.
@@ -267,15 +273,28 @@ class dithering:
             self.report(simple=False)
         
     def report(self, simple=True):
-        print("boresight position is   : {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
-        print("source position is      : {0:.3f} , {1:.3f}".format(self.alt, self.az))
-        print("fiber position is       : {0:.3f} , {1:.3f}".format(self.fiber_x[0], self.fiber_y[0]))
-        print("focal plane position is : {0:.3f} , {1:.3f}".format(self.focal_x[0], self.focal_y[0]))
-        print("fiber placement         : {0} um, {1} um".format(self.fiber_placement[0], self.fiber_placement[1]))
-        if not simple:
-            print("With the current configuration, SNR are:")
-            for camera_name in self.SNR:
-                print("-- camera {0}: {1:.3f} / {2}".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
+        if self.output_file is not None:
+            f = open(self.output_file, "a")
+            f.write("boresight position is   : {0:.3f} , {1:.3f}\n".format(self.alt_bore, self.az_bore))
+            f.write("source position is      : {0:.3f} , {1:.3f}\n".format(self.alt, self.az))
+            f.write("fiber position is       : {0:.3f} , {1:.3f}\n".format(self.fiber_x[0], self.fiber_y[0]))
+            f.write("focal plane position is : {0:.3f} , {1:.3f}\n".format(self.focal_x[0], self.focal_y[0]))
+            f.write("fiber placement         : {0} um, {1} um\n".format(self.fiber_placement[0], self.fiber_placement[1]))
+            if not simple:
+                f.write("With the current configuration, SNR are:\n")
+                for camera_name in self.SNR:
+                    f.write("-- camera {0}: {1:.3f} / {2}\n".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
+            f.close()
+        else:
+            print("boresight position is   : {0:.3f} , {1:.3f}".format(self.alt_bore, self.az_bore))
+            print("source position is      : {0:.3f} , {1:.3f}".format(self.alt, self.az))
+            print("fiber position is       : {0:.3f} , {1:.3f}".format(self.fiber_x[0], self.fiber_y[0]))
+            print("focal plane position is : {0:.3f} , {1:.3f}".format(self.focal_x[0], self.focal_y[0]))
+            print("fiber placement         : {0} um, {1} um".format(self.fiber_placement[0], self.fiber_placement[1]))
+            if not simple:
+                print("With the current configuration, SNR are:")
+                for camera_name in self.SNR:
+                    print("-- camera {0}: {1:.3f} / {2}".format(camera_name, np.median(self.SNR[camera_name][0]), self.SNR[camera_name][1]))
 
     def set_source_position(self, alt, az):
         self.alt = alt

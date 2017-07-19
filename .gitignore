@@ -42,3 +42,7 @@ test_redux-*
 
 # Mac OSX
 .DS_Store
+
+# random stuff that may/may not be added
+to_be_changed
+figures
