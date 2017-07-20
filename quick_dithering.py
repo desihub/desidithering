@@ -42,7 +42,7 @@ alt_bore, az_bore = telescope_info['telescope_boresight']
 dithering.set_boresight_position(alt_bore*u.deg, az_bore*u.deg)
 
 # generate a set of random values to be used
-num_randoms = 10000
+num_randoms = yaml_input['num_randoms']#1000
 x_offsets   = np.zeros(num_randoms)
 y_offsets   = np.zeros(num_randoms)
 az_offsets  = np.zeros(num_randoms)
@@ -114,6 +114,8 @@ for i in range(1, num_sources+1):
         results_b_bore.append(np.median(dithering.SNR['b'][0]))
         results_r_bore.append(np.median(dithering.SNR['r'][0]))
         results_z_bore.append(np.median(dithering.SNR['z'][0]))
+        # move the telescope to original position - reset
+        dithering.change_alt_az_bore_position(alt_bore*u.deg, az_bore*u.deg)
         
     source = {}
     source['source_type'] = source_type
