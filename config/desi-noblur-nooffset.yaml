@@ -273,7 +273,7 @@ source:
     type: qso
     table:
         format: ascii
-        path: spectra/spec-ABmag22.0.dat
+        path: /home/tyapici/DESI_Projects/desidithering/data/STD_FSTAR_spectrum_1.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:
@@ -323,7 +323,7 @@ source:
 observation:
     observatory: KPNO
     constants:
-        exposure_time: 1800.0 s
+        exposure_time: 60.0 s
         # Atmospheric pressure at the telescope (not at sea level) used
         # to calculate atmospheric refraction.  Leave commented out to use a
         # nominal value calculated for the observatory elevation.

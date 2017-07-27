@@ -277,7 +277,7 @@ source:
     type: qso
     table:
         format: ascii
-        path: spectra/spec-ABmag22.0.dat
+        path: /home/tyapici/DESI_Projects/desidithering/py/fstar_spectrum.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:
