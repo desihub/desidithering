@@ -273,7 +273,8 @@ source:
     type: qso
     table:
         format: ascii
-        path: /home/tyapici/DESI_Projects/desidithering/data/STD_FSTAR_spectrum_1.dat
+        path: spectra/spec-ABmag22.0.dat
+        #/home/tyapici/DESI_Projects/desidithering/data/STD_FSTAR_spectrum_1.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:

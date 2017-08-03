@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from astropy.io import fits
 # add dithering module to path and load it
-sys.path.append('./py')
+sys.path.append('../py')
 import dithering
 import extract_spectrum as es
 
@@ -31,10 +31,12 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo):
     return g.ravel()
     
 def run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az):
-
+    check_angles = {0: [-30., -150.], 1: [-30., 90], 2: [-150., 90.], 3: [-30., -150.]}
+    search_radius = 50.
+    
     # generate the random offset but not reveal it to user until the end
-    x_offset = random.gauss(0, random_)# * random_
-    y_offset = random.gauss(0, random_)# * random_
+    x_offset = random.gauss(0, random_)
+    y_offset = random.gauss(0, random_)
     
     dithering.set_boresight_position(boresight_alt*u.deg, boresight_az*u.deg)
     dithering.set_source_position(source_alt*u.deg, source_az*u.deg)
@@ -52,7 +54,47 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     x.append(0)
     y.append(0)
     #print("fiber placement before test: {0}".format(dithering.fiber_placement))
-    
+
+    # dithering starts here
+    # it is a very simple method to find the maximum point
+    # the optimal is with 6 measurements (including the initial measurement)
+    # -- first dither
+    x_dither = search_radius*np.cos(30.*u.deg)
+    y_dither = search_radius*np.sin(30.*u.deg)
+    dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+    dithering.run_simulation(source_type, *source, report=False)
+    SNR.append(np.median(dithering.SNR['b'][0]))
+    x.append(x_dither)
+    y.append(y_dither)
+    # -- second dither
+    x_dither = -1*search_radius*np.cos(30.*u.deg)
+    y_dither = search_radius*np.sin(30.*u.deg)
+    dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+    dithering.run_simulation(source_type, *source, report=False)
+    SNR.append(np.median(dithering.SNR['b'][0]))
+    x.append(x_dither)
+    y.append(y_dither)
+    # -- third dither
+    x_dither = 0. 
+    y_dither = -1*search_radius
+    dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+    dithering.run_simulation(source_type, *source, report=False)
+    SNR.append(np.median(dithering.SNR['b'][0]))
+    x.append(x_dither)
+    y.append(y_dither)
+    # -- next two dithering depends on the maximum among the ones searches
+    max_idx = np.argmax(SNR)
+    new_angles = check_angles[max_idx]
+    for i in range(2):
+        x_dither = -1*search_radius*np.cos(new_angles[i]*u.deg)
+        y_dither = search_radius*np.sin(new_angles[i]*u.deg)
+        dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+        dithering.run_simulation(source_type, *source, report=False)
+        SNR.append(np.median(dithering.SNR['b'][0]))
+        x.append(x_dither)
+        y.append(y_dither)
+
+    """
     # dithering
     search_radia = [random_*1., random_*2.]
     num_dithering = 3
@@ -71,7 +113,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         SNR.append(np.median(dithering.SNR['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
-
+    """
     #plt.hist2d(x, y, weights=SNR, bins=num_dithering*2, cmap=my_cmap, vmin=0.05)
     #plt.xlabel('x position [um]')
     #plt.ylabel('y position [um]')
@@ -95,7 +137,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     #print("====================================================")
     return x_offset, y_offset, popt[1], popt[2]
     
-config_file = "./config/desi-noblur-nooffset.yaml"
+config_file = "../config/desi-noblur-nooffset.yaml"
 dithering = dithering.dithering(config_file=config_file)
 random_       = 50.
 num_sources   = 200
@@ -180,6 +222,8 @@ for i in range(num_pointings):
         dithering.desi.source.update_out()
     
         x_offset, y_offset, opt_x_offset, opt_y_offset  = run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az)
+        #print(x_offset, y_offset, opt_x_offset, opt_y_offset)
+        
         known_offset_x[j] = x_offset
         known_offset_y[j] = y_offset
         calc_offset_x[j] = opt_x_offset
@@ -193,7 +237,9 @@ for i in range(num_pointings):
         known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
         known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
         known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
-                
+
+        #print(calc_snr_b[j], known_snr_b[j])
+        
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
          fits.Column(name="boresight_az", array=bore_az, format="E"),
@@ -212,12 +258,12 @@ for i in range(num_pointings):
         ])
     hdulist.append(thdu)
 
-temp_filename = "results.fits"
+temp_filename = "../data/results.fits"
 filename = temp_filename
 trial = 1
 while True:
     if os.path.exists(filename):
-        filename = temp_filename.split(".")[0]+"_{}".format(trial)+".fits"
+        filename = temp_filename.split(".fits")[0]+"_{}".format(trial)+".fits"
         trial = trial + 1
     else:
         break

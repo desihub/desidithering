@@ -12,37 +12,23 @@ os.environ["DESI_SPECTRO_REDUX"] = "/home/tyapici/data/DESI/spectro/redux/"
 os.environ["SPECPROD"] = "dc17a2"
 
 basedir = os.path.join(os.getenv("DESI_SPECTRO_REDUX"),os.getenv("SPECPROD"),"spectra-64")
-subdir = os.listdir(basedir)
-basedir = os.path.join(basedir,subdir[0])
-subdir = os.listdir(basedir)
-basedir = os.path.join(basedir,subdir[0])
-subdir = os.listdir(basedir)
+specfilenames = glob(basedir+"/*/*/spectra*")
 
-specfilename = glob(os.path.join(basedir,'spectra*fits'))[0]
-fm = fitsio.read(specfilename,1)
-specfilename = glob(os.path.join(basedir,'spectra*fits'))[0]
-
-bwave = fitsio.read(specfilename,"B_WAVELENGTH")
-rwave = fitsio.read(specfilename,"R_WAVELENGTH")
-zwave = fitsio.read(specfilename,"Z_WAVELENGTH")
-wave = np.hstack([bwave,rwave,zwave])
-
-bflux = fitsio.read(specfilename,"B_FLUX")
-rflux = fitsio.read(specfilename,"R_FLUX")
-zflux = fitsio.read(specfilename,"Z_FLUX")
-flux = np.hstack([bflux,rflux,zflux])
-
-def get_spectrum(source_type, idx, output=False):
-    stds = np.where(fm["DESI_TARGET"] & desi_mask[source_type])[0]
-    #plt.plot(fm["RA_TARGET"],fm["DEC_TARGET"],'b,')
-    #plt.plot(fm["RA_TARGET"][stds],fm["DEC_TARGET"][stds],'kx')
-    #plt.show()
+def get_spectrum(file_idx=0, source_idx=0, output=False):
+    specfilename = specfilenames[file_idx]
+    bwave = fitsio.read(specfilename,"B_WAVELENGTH")
+    rwave = fitsio.read(specfilename,"R_WAVELENGTH")
+    zwave = fitsio.read(specfilename,"Z_WAVELENGTH")
+    wave = np.hstack([bwave,rwave,zwave])
+    bflux = fitsio.read(specfilename,"B_FLUX")[source_idx]
+    rflux = fitsio.read(specfilename,"R_FLUX")[source_idx]
+    zflux = fitsio.read(specfilename,"Z_FLUX")[source_idx]
+    flux = np.hstack([bflux,rflux,zflux])
+    
     from scipy.interpolate import interp1d
-    num_objects = len(stds)
-    assert idx < num_objects
-    extrapolator = interp1d(wave, flux[stds[idx]], fill_value='extrapolate')
-    wavelengths = np.arange(3500., 10000.0, 0.1)
-    fluxvalues = np.zeros(len(wavelengths))
+    extrapolator = interp1d(wave, flux, fill_value='extrapolate')
+    wavelengths  = np.arange(3500., 10000.0, 0.1)
+    fluxvalues   = np.zeros(len(wavelengths))
     if output:
         fd = open("{}_spectrum_{}.dat".format(source_type, i), "w")
         fd.write("#   WAVELENGTH        FLUX\n#------------- -----------\n")
@@ -59,10 +45,15 @@ def get_spectrum(source_type, idx, output=False):
     return wavelengths, fluxvalues
 
 def get_random_spectrum(source_type, output=False):
-    stds = np.where(fm["DESI_TARGET"] & desi_mask[source_type])[0]
-    num_objects = len(stds)
-    idx = random.randint(0, num_objects-1)
-    return get_spectrum(source_type, idx, output)
+    num_objs = 0
+    while num_objs<=0:
+        file_idx = random.randint(0, len(specfilenames)-1)
+        fm       = fitsio.read(specfilenames[file_idx],1)
+        stds     = np.where(fm["DESI_TARGET"] & desi_mask[source_type])[0]
+        num_objs = len(stds)
+    random_obj = random.randint(0, num_objs-1)
+    source_idx  = stds[random_obj]
+    return get_spectrum(file_idx, source_idx, output)
 
 if __name__=="__main__":
-    print(get_spectrum("STD_FSTAR", 0))
+    print(get_random_spectrum("STD_FSTAR", 0))
