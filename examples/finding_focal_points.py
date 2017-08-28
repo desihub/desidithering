@@ -32,7 +32,6 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo):
     
 def run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az):
     check_angles = {0: [-30., -150.], 1: [-30., 90], 2: [-150., 90.], 3: [-30., -150.]}
-    search_radius = 50.
     
     # generate the random offset but not reveal it to user until the end
     x_offset = random.gauss(0, random_)
@@ -94,32 +93,6 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         x.append(x_dither)
         y.append(y_dither)
 
-    """
-    # dithering
-    search_radia = [random_*1., random_*2.]
-    num_dithering = 3
-    for i in range(num_dithering):
-        x_dither = search_radia[0] * np.cos((360./num_dithering)*i*u.deg)
-        y_dither = search_radia[0] * np.sin((360./num_dithering)*i*u.deg)
-        dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        dithering.run_simulation(source_type, *source, report=False)
-        SNR.append(np.median(dithering.SNR['b'][0]))
-        x.append(x_dither)
-        y.append(y_dither)
-        x_dither = search_radia[1] * np.cos((360./num_dithering)*i*u.deg)
-        y_dither = search_radia[1] * np.sin((360./num_dithering)*i*u.deg)
-        dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        dithering.run_simulation(source_type, *source, report=False)
-        SNR.append(np.median(dithering.SNR['b'][0]))
-        x.append(x_dither)
-        y.append(y_dither)
-    """
-    #plt.hist2d(x, y, weights=SNR, bins=num_dithering*2, cmap=my_cmap, vmin=0.05)
-    #plt.xlabel('x position [um]')
-    #plt.ylabel('y position [um]')
-    #plt.colorbar(label='SNR')
-    #plt.show()
-
     coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
     data = np.array(SNR).ravel()
     initial_guess = (20., 0., 0.)
@@ -139,7 +112,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     
 config_file = "../config/desi-noblur-nooffset.yaml"
 dithering = dithering.dithering(config_file=config_file)
-random_       = 50.
+random_       = 70.
+search_radius = float(sys.argv[1])
 num_sources   = 200
 num_pointings = 2
 num_total     = num_pointings * num_sources - 1
@@ -149,6 +123,11 @@ results_r     = []
 real_values_r = []
 results_z     = []
 real_values_z = []
+
+if ( os.path.isdir("../data/{}um".format(search_radius)) ):
+    print("directory path exists")
+else:
+    os.mkdir("../data/{}um".format(search_radius))
 
 try:
     import progressbar
@@ -258,7 +237,7 @@ for i in range(num_pointings):
         ])
     hdulist.append(thdu)
 
-temp_filename = "../data/results.fits"
+temp_filename = "../data/{}um/results.fits".format(search_radius)
 filename = temp_filename
 trial = 1
 while True:
