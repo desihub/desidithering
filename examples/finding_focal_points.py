@@ -20,13 +20,13 @@ my_cmap.set_under('white',.01)
 my_cmap.set_over('white', 300)
 my_cmap.set_bad('white')
 
-def twoD_Gaussian(xy_tuple, amplitude, xo, yo):
+def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
     (x, y) = xy_tuple
     xo = float(xo)
     yo = float(yo)
     amplitude = float(amplitude)
-    sigma_x = random_
-    sigma_y = random_
+    #sigma_x = random_
+    #sigma_y = random_
     g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma_x**2) + (y-yo)**2/(2*sigma_y**2) ) )
     return g.ravel()
     
@@ -95,7 +95,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
 
     coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
     data = np.array(SNR).ravel()
-    initial_guess = (20., 0., 0.)
+    initial_guess = (20., 0., 0., random_, random_)
     try:
         popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
     except:
@@ -112,7 +112,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     
 config_file = "../config/desi-noblur-nooffset.yaml"
 dithering = dithering.dithering(config_file=config_file)
-random_       = 70.
+random_       = 50.
 search_radius = float(sys.argv[1])
 num_sources   = 200
 num_pointings = 2
