@@ -266,8 +266,8 @@ class dithering:
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
         self.SNR = {}
         for output in self.desi.camera_output:
-            snr = (output['num_source_electrons'][:, 0]/
-                   np.sqrt(output['variance_electrons'][:, 0]))
+            snr = (output['num_source_electrons'][:, 0])#/
+                   #np.sqrt(output['variance_electrons'][:, 0]))
             self.SNR[output.meta['name']] = [snr, output.meta['pixel_size']]
         if report:
             self.report(simple=False)
