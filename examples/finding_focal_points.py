@@ -13,6 +13,8 @@ sys.path.append('../py')
 import dithering
 import extract_spectrum as es
 
+is_plot = False
+
 # general plotting options 
 rcParams.update({'figure.autolayout': True})
 my_cmap = plt.cm.jet
@@ -31,8 +33,20 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
     return g.ravel()
     
 def run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az):
-    check_angles = {0: [-30., -150.], 1: [-30., 90], 2: [-150., 90.], 3: [-30., -150.]}
-    
+    check_angles_primary   = { 0: [-30., -150.],
+                               1: [-30., 90],
+                               2: [-150., 90.],
+                               3: [330., 210.] }
+    """
+    check_angles_secondary = { 0: {4: [30, -90],  5: [150, -90]},
+                               1: {4: [30, -90],  5: [30, 150]},
+                               2: {4: [150, -90], 5: [30, 150]},
+                               3: {4: [30, -90],  5: [150, -90]} }
+    """
+    check_angles_secondary = { 0: {4: [60.0,  240.0, 330.0], 5: [120.0, 210.0, 300.0]},
+                               1: {4: [60.0,  240.0, 330.0], 5: [0.0,   90.0,  180.0]},
+                               2: {4: [120.0, 210.0, 300.0], 5: [0.0,   90.0,  180.0]},
+                               3: {4: [60.0,  240.0, 330.0], 5: [120.0, 210.0, 300.0]} }
     # generate the random offset but not reveal it to user until the end
     x_offset = random.gauss(0, random_)
     y_offset = random.gauss(0, random_)
@@ -83,16 +97,43 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     y.append(y_dither)
     # -- next two dithering depends on the maximum among the ones searches
     max_idx = np.argmax(SNR)
-    new_angles = check_angles[max_idx]
+    new_angles_primary   = check_angles_primary[max_idx]
     for i in range(2):
-        x_dither = -1*search_radius*np.cos(new_angles[i]*u.deg)
-        y_dither = search_radius*np.sin(new_angles[i]*u.deg)
+        x_dither = search_radius*np.cos(new_angles_primary[i]*u.deg)+x[max_idx]
+        y_dither = search_radius*np.sin(new_angles_primary[i]*u.deg)+y[max_idx]
+        dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+        dithering.run_simulation(source_type, *source, report=False)
+        SNR.append(np.median(dithering.SNR['b'][0]))
+        x.append(x_dither)
+        y.append(y_dither)
+    if(SNR[4]>SNR[5]):
+        new_angles_secondary = check_angles_secondary[max_idx][4]
+        max_idx2 = 4
+    else:
+        new_angles_secondary = check_angles_secondary[max_idx][5]
+        max_idx2 = 5
+    for i in range(3):
+        x_dither = .75*search_radius*np.cos(new_angles_secondary[i]*u.deg) + x[max_idx2]
+        y_dither = .75*search_radius*np.sin(new_angles_secondary[i]*u.deg) + y[max_idx2]
         dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
         dithering.run_simulation(source_type, *source, report=False)
         SNR.append(np.median(dithering.SNR['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
 
+    if is_plot:
+        plt.plot(x[0], y[0], 'o')
+        plt.plot(x[1], y[1], '*')
+        plt.plot(x[2], y[2], '*')
+        plt.plot(x[3], y[3], '*')
+        plt.plot(x[4], y[4], 'v')
+        plt.plot(x[5], y[5], 'v')
+        plt.plot(x[6], y[6], 's')
+        plt.plot(x[7], y[7], 's')
+        plt.plot(x[8], y[8], 's')
+        plt.plot(-x_offset, -y_offset, 'p')
+        plt.show()
+    
     coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
     data = np.array(SNR).ravel()
     initial_guess = (20., 0., 0., random_, random_)
@@ -108,12 +149,13 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     #dithering.place_fiber([0., 0.])
     #dithering.run_simulation(source_type, *source, report=True)
     #print("====================================================")
+    #print(x_offset, y_offset, popt[1], popt[2])
     return x_offset, y_offset, popt[1], popt[2]
     
 config_file = "../config/desi-noblur-nooffset.yaml"
 dithering = dithering.dithering(config_file=config_file)
-random_       = 50.
 search_radius = float(sys.argv[1])
+random_       = float(sys.argv[2])
 num_sources   = 200
 num_pointings = 2
 num_total     = num_pointings * num_sources - 1
@@ -171,7 +213,7 @@ for i in range(num_pointings):
     
     # define the source to be observed
     source_type       = "qso"
-    half_light_radius = 0.3
+    half_light_radius = 0.5
     for j in range(num_sources):
 
         if bar is not None:
@@ -237,7 +279,17 @@ for i in range(num_pointings):
         ])
     hdulist.append(thdu)
 
-temp_filename = "../data/{}um/results.fits".format(search_radius)
+try:
+    os.mkdir("../data/{}um_RMS".format(random_))
+except:
+    print("main folder exists... checking the subfolder...")
+
+try:
+    os.mkdir("../data/{}um_RMS/{}um".format(random_, search_radius))
+except:
+    print("subfolder exists.. moving on to saving the file")
+    
+temp_filename = "../data/{}um_RMS/{}um/results.fits".format(random_, search_radius)
 filename = temp_filename
 trial = 1
 while True:
