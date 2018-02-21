@@ -12,19 +12,28 @@ my_cmap.set_bad('white')
 
 def plot(band, search_radius, rms):
 
-    hdulist = fits.open("../data/{}um_RMS/{}um/results.fits".format(int(rms), search_radius))
+    hdulist = fits.open("../data/{}.0um_RMS/{}um/results.fits".format(int(rms), search_radius))
     x = hdulist[1].data['known_snr_{}'.format(band)]
     y = hdulist[1].data['calc_snr_{}'.format(band)]
 
     for i in range(1, 10):
         try:
-            hdulist = fits.open("../data/{}um_RMS/{}um/results_{}.fits".format(int(rms), search_radius, i))
+            filename = "../data/{}.0um_RMS/{}um/results_{}.fits".format(int(rms), search_radius, i)
+            print(filename)
+            hdulist = fits.open("../data/{}.0um_RMS/{}um/results_{}.fits".format(int(rms), search_radius, i))
+            print("here")
             x = np.append(x, hdulist[1].data['known_snr_{}'.format(band)])
             y = np.append(y, hdulist[1].data['calc_snr_{}'.format(band)])
+            print("there")
         except:
             continue
 
+    print(len(x))
+    plt.plot(x, y, 'o')
+    plt.show()
+        
     counts, xedges, yedges, img = plt.hist2d(x, y, bins=100, cmap=my_cmap, vmin=1, norm=mpl.colors.LogNorm())
+    plt.show()
     x_binsize = (xedges[1]-xedges[0])
     y_binsize = (yedges[1]-yedges[0])
     num_xedges = len(xedges)
@@ -44,7 +53,8 @@ def plot(band, search_radius, rms):
     plt.savefig("../figures/percent_errors_1Dhist_{}umRMS_{}um_{}.eps".format(int(rms), search_radius, band))
     plt.savefig("../figures/percent_errors_1Dhist_{}umRMS_{}um_{}.png".format(int(rms), search_radius, band))
     plt.savefig("../figures/percent_errors_1Dhist_{}umRMS_{}um_{}.pdf".format(int(rms), search_radius, band))
-
+    plt.show()
+    
     x = []
     s = []
     f = []
@@ -69,6 +79,7 @@ def plot(band, search_radius, rms):
     plt.savefig("../figures/failure_rate_{}umRMS_{}um_{}.eps".format(int(rms), search_radius, band))
     plt.savefig("../figures/failure_rate_{}umRMS_{}um_{}.pdf".format(int(rms), search_radius, band))
     plt.savefig("../figures/failure_rate_{}umRMS_{}um_{}.png".format(int(rms), search_radius, band))
+    plt.show()
     plt.clf()
     plt.plot(x, s, 'x')
     plt.title("SNR {} results".format(band))
@@ -77,13 +88,13 @@ def plot(band, search_radius, rms):
     plt.savefig("../figures/success_rate_{}umRMS_{}um_{}.eps".format(int(rms), search_radius, band))
     plt.savefig("../figures/success_rate_{}umRMS_{}um_{}.pdf".format(int(rms), search_radius, band))
     plt.savefig("../figures/success_rate_{}umRMS_{}um_{}.png".format(int(rms), search_radius, band))
+    plt.show()
 
-
-search_radia = [30, 50, 70, 90]
-rmss = [50, 70]
+search_radia = [35]#[30, 50, 70, 90]
+rmss = [70]#[50, 70]
 
 for rms in rmss:
     for r in search_radia:
-        plot("b", float(r), rms)
+        #plot("b", float(r), rms)
         plot("r", float(r), rms)
-        plot("z", float(r), rms)
+        #plot("z", float(r), rms)
