@@ -8,10 +8,12 @@ import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from astropy.io import fits
+from astropy import table
 # add dithering module to path and load it
 sys.path.append('../py')
 import dithering
 import extract_spectrum as es
+import argparse
 
 is_plot = False
 
@@ -141,7 +143,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
     except:
         #print("NO CONVERGENCE")
-        return -9999, -9999, -9999, -9999
+        return -9999, -9999, -9999, -9999, -9999
     #print("Optimization found the following:")
     dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
     dithering.run_simulation(source_type, *source, report=False)
@@ -150,14 +152,24 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     #dithering.run_simulation(source_type, *source, report=True)
     #print("====================================================")
     #print(x_offset, y_offset, popt[1], popt[2])
-    return x_offset, y_offset, popt[1], popt[2]
-    
-config_file = "../config/desi-noblur-nooffset.yaml"
-dithering = dithering.dithering(config_file=config_file)
-search_radius = float(sys.argv[1])
-random_       = float(sys.argv[2])
-num_sources   = 200
-num_pointings = 2
+    return x_offset, y_offset, popt[1], popt[2], SNR
+
+parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
+parser.add_argument("-c",               dest="config", default="../config/desi-noblur-nooffset.yaml")
+parser.add_argument("--step-size",      dest="stepsize", type=float, required=True)
+parser.add_argument("--offset-rms",     dest="randomoffset", type=float, required=True)
+parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
+parser.add_argument("--half-light-radius", dest="half_light_radius", type=float, default=0.5)
+parsed_args = parser.parse_args()
+
+config_file       = parsed_args.config
+dithering         = dithering.dithering(config_file=config_file)
+search_radius     = parsed_args.stepsize
+random_           = parsed_args.randomoffset
+systematic_       = parsed_args.systematicoffset
+half_light_radius = parsed_args.half_light_radius
+num_sources   = 5
+num_pointings = 1
 num_total     = num_pointings * num_sources - 1
 results_b     = []
 real_values_b = []
@@ -187,6 +199,7 @@ prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
 prihdr["COMMENT"] = "From a uniform distribution with [0, 30), random pointings were chosen"
 prihdr['COMMENT'] = "For each boresight altitude and azimuth, there are {} sources randomly located (-1, 1) degrees of the boresight.".format(num_sources)
 prihdr["COMMENT"] = "For random x and y offsets, {} um was assumed.".format(random_)
+prihdr["HLR"]     = half_light_radius
 prihdu  = fits.PrimaryHDU(header=prihdr)
 hdulist = fits.HDUList([prihdu])
 
@@ -202,6 +215,8 @@ for i in range(num_pointings):
     src_az  = np.zeros(num_sources)
     known_offset_x = np.zeros(num_sources)
     known_offset_y = np.zeros(num_sources)
+    known_systematic_x = np.zeros(num_sources)
+    known_systematic_y = np.zeros(num_sources)
     calc_offset_x = np.zeros(num_sources)
     calc_offset_y = np.zeros(num_sources)
     known_snr_r = np.zeros(num_sources)
@@ -210,10 +225,10 @@ for i in range(num_pointings):
     calc_snr_r = np.zeros(num_sources)
     calc_snr_b = np.zeros(num_sources)
     calc_snr_z = np.zeros(num_sources)
+    calc_snrs  = np.zeros((num_sources,9))
     
     # define the source to be observed
     source_type       = "qso"
-    half_light_radius = 0.5
     for j in range(num_sources):
 
         if bar is not None:
@@ -242,25 +257,26 @@ for i in range(num_pointings):
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
     
-        x_offset, y_offset, opt_x_offset, opt_y_offset  = run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az)
+        x_offset, y_offset, opt_x_offset, opt_y_offset, SNR  = run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az)
         #print(x_offset, y_offset, opt_x_offset, opt_y_offset)
         
         known_offset_x[j] = x_offset
         known_offset_y[j] = y_offset
+        known_systematic_x[j] = systematic_[0]
+        known_systematic_y[j] = systematic_[1]
         calc_offset_x[j] = opt_x_offset
         calc_offset_y[j] = opt_y_offset
         
         calc_snr_b[j] = (np.median(dithering.SNR['b'][0]))
         calc_snr_r[j] = (np.median(dithering.SNR['r'][0]))
         calc_snr_z[j] = (np.median(dithering.SNR['z'][0]))
+        calc_snrs[j]  = np.array(SNR)
         dithering.place_fiber([0., 0.])
         dithering.run_simulation(source_type, *source, report=False)
         known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
         known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
         known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
 
-        #print(calc_snr_b[j], known_snr_b[j])
-        
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
          fits.Column(name="boresight_az", array=bore_az, format="E"),
@@ -268,6 +284,8 @@ for i in range(num_pointings):
          fits.Column(name="source_az", array=src_az, format="E"),
          fits.Column(name="known_offset_x", array=known_offset_x, format="E"),
          fits.Column(name="known_offset_y", array=known_offset_y, format="E"),
+         fits.Column(name="known_systematic_x", array=known_systematic_x, format="E"),
+         fits.Column(name="known_systematic_y", array=known_systematic_y, format="E"),
          fits.Column(name="calc_offset_x", array=calc_offset_x, format="E"),
          fits.Column(name="calc_offset_y", array=calc_offset_y, format="E"),
          fits.Column(name="known_snr_b", array=known_snr_b, format="E"),
@@ -276,9 +294,10 @@ for i in range(num_pointings):
          fits.Column(name="calc_snr_b", array=calc_snr_b, format="E"),
          fits.Column(name="calc_snr_r", array=calc_snr_r, format="E"),
          fits.Column(name="calc_snr_z", array=calc_snr_z, format="E"),
+         fits.Column(name="calc_snrs", array=calc_snrs,  format="9E"),
         ])
     hdulist.append(thdu)
-
+    
 try:
     os.mkdir("../data/{}um_RMS".format(random_))
 except:
