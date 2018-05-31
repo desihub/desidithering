@@ -133,7 +133,8 @@ instrument:
         # -> this one is for no blue
         #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_noblur.ecsv
         # -> this one if for blur
-        path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
+        #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
+        path: throughput/DESI-0347_blur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
         format: ascii.ecsv
     offset:
@@ -273,7 +274,8 @@ source:
     type: qso
     table:
         format: ascii
-        path: /home/tyapici/DESI_Projects/desidithering/py/fstar_spectrum.dat
+        #path: /home/tyapici/DESI_Projects/desidithering/py/fstar_spectrum.dat
+        path: spectra/spec-ABmag22.0.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:
