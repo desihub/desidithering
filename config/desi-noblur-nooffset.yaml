@@ -132,7 +132,7 @@ instrument:
         # see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
         # -> this one is for no blue
         #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_noblur.ecsv
-        path: throughput/DESI-0347_noblur.ecsv
+        path: ../../desidithering/config/DESI-0347_noblur.ecsv
         # -> this one if for blur
         #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
