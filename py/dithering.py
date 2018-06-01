@@ -18,6 +18,8 @@ import astropy.table
 import scipy
 import random
 
+import time
+
 # specsim (DESI related packages)
 # some of them are probably not being used in this module
 # these will be cleaned up later
@@ -31,6 +33,9 @@ import specsim.observation as obs
 import specsim.simulator as sim
 import specsim.atmosphere as atm
 import specsim.transform as trans
+
+ARCSEC2DEG = 0.000277778
+UM2MM      = 0.001
 
 class dithering:
     """
@@ -67,7 +72,9 @@ class dithering:
             f = open(self.output_file, "w")
             f.write("Output generated at : \n")
             f.close()
-        
+        # need to transform platescale to the correct units to be used in transformation function
+        self.platescale *= (UM2MM / ARCSEC2DEG)
+            
     """
     Function to generate a single source
     Function is only for generating the source profile parameters
@@ -261,16 +268,29 @@ class dithering:
 
     """
     def run_simulation(self, source_type, source_fraction, source_half_light_radius,
-                       source_minor_major_axis_ratio, source_position_angle, report=True):
+                       source_minor_major_axis_ratio, source_position_angle, report=True, seeing_fwhm_ref_offset=0*u.arcsec,
+                       airmass_offset=0):
+        # store the variables in a local variable to revert back at the end
+        org_seeing_fwhm_ref = self.desi.atmosphere.seeing_fwhm_ref
+        org_airmass         = self.desi.atmosphere.airmass
+        self.desi.atmosphere.seeing_fwhm_ref += seeing_fwhm_ref_offset
+        self.desi.atmosphere.airmass         += airmass_offset
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
         self.SNR = {}
+        self.signal = {}
         for output in self.desi.camera_output:
-            snr = (output['num_source_electrons'][:, 0])#/
-                   #np.sqrt(output['variance_electrons'][:, 0]))
+            snr = (output['num_source_electrons'][:, 0])/np.sqrt(output['variance_electrons'][:, 0])
+            signal = (output['num_source_electrons'][:, 0])
             self.SNR[output.meta['name']] = [snr, output.meta['pixel_size']]
+            self.signal[output.meta['name']] = [signal, output.meta['pixel_size']]
         if report:
             self.report(simple=False)
+        # variables are restored using the local storage variables
+        self.desi.atmosphere.seeing_fwhm_ref = org_seeing_fwhm_ref
+        self.desi.atmosphere.airmass         = org_airmass
+        del org_seeing_fwhm_ref
+        del org_airmass
         
     def report(self, simple=True):
         if self.output_file is not None:
@@ -387,10 +407,14 @@ class dithering:
         self.phi      = angle
 
     def make_positioner_rotation(self):
-        prev_x = self.radius * np.cos(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.cos(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
-        x      = self.radius * np.cos(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.cos(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
-        prev_y = self.radius * np.sin(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.sin(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
-        y      = self.radius * np.sin(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + self.radius * np.sin(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        prev_x = self.radius * np.cos(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + \
+                 self.radius * np.cos(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        x      = self.radius * np.cos(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + \
+                 self.radius * np.cos(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        prev_y = self.radius * np.sin(self.prev_theta.to(u.rad).value + self.theta_0.to(u.rad).value) + \
+                 self.radius * np.sin(self.prev_phi.to(u.rad).value + self.phi_0.to(u.rad).value)
+        y      = self.radius * np.sin(self.theta.to(u.rad).value + self.theta_0.to(u.rad).value) + \
+                 self.radius * np.sin(self.phi.to(u.rad).value + self.phi_0.to(u.rad).value)
         delta_x = (x - prev_x).to(u.um)
         delta_y = (y - prev_y).to(u.um)
         self.fiber_x = self.fiber_x + delta_x

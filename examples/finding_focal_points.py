@@ -8,10 +8,13 @@ import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from astropy.io import fits
+from astropy import table
 # add dithering module to path and load it
 sys.path.append('../py')
 import dithering
 import extract_spectrum as es
+import argparse
+import time
 
 is_plot = False
 
@@ -32,7 +35,7 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
     g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma_x**2) + (y-yo)**2/(2*sigma_y**2) ) )
     return g.ravel()
     
-def run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az):
+def run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az, random_seeing_offsets, random_airmass_offsets):
     check_angles_primary   = { 0: [-30., -150.],
                                1: [-30., 90],
                                2: [-150., 90.],
@@ -60,9 +63,13 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     x   = []
     y   = []
 
+    focal_x = dithering.focal_x[0]
+    focal_y = dithering.focal_y[0]
+    
     # initial point
     dithering.place_fiber([x_offset, y_offset])
-    dithering.run_simulation(source_type, *source, report=False)
+    dithering.run_simulation(source_type, *source, report=False, \
+                             seeing_fwhm_ref_offset=random_seeing_offsets[0], airmass_offset=random_airmass_offsets[0])
     SNR.append(np.median(dithering.SNR['b'][0]))
     x.append(0)
     y.append(0)
@@ -75,7 +82,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     x_dither = search_radius*np.cos(30.*u.deg)
     y_dither = search_radius*np.sin(30.*u.deg)
     dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-    dithering.run_simulation(source_type, *source, report=False)
+    dithering.run_simulation(source_type, *source, report=False, \
+                             seeing_fwhm_ref_offset=random_seeing_offsets[1], airmass_offset=random_airmass_offsets[1])
     SNR.append(np.median(dithering.SNR['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
@@ -83,7 +91,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     x_dither = -1*search_radius*np.cos(30.*u.deg)
     y_dither = search_radius*np.sin(30.*u.deg)
     dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-    dithering.run_simulation(source_type, *source, report=False)
+    dithering.run_simulation(source_type, *source, report=False, \
+                             seeing_fwhm_ref_offset=random_seeing_offsets[2], airmass_offset=random_airmass_offsets[2])
     SNR.append(np.median(dithering.SNR['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
@@ -91,7 +100,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     x_dither = 0. 
     y_dither = -1*search_radius
     dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-    dithering.run_simulation(source_type, *source, report=False)
+    dithering.run_simulation(source_type, *source, report=False, \
+                             seeing_fwhm_ref_offset=random_seeing_offsets[3], airmass_offset=random_airmass_offsets[3])
     SNR.append(np.median(dithering.SNR['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
@@ -102,7 +112,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         x_dither = search_radius*np.cos(new_angles_primary[i]*u.deg)+x[max_idx]
         y_dither = search_radius*np.sin(new_angles_primary[i]*u.deg)+y[max_idx]
         dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        dithering.run_simulation(source_type, *source, report=False)
+        dithering.run_simulation(source_type, *source, report=False, \
+                                 seeing_fwhm_ref_offset=random_seeing_offsets[4+i], airmass_offset=random_airmass_offsets[4+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
@@ -116,7 +127,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         x_dither = .75*search_radius*np.cos(new_angles_secondary[i]*u.deg) + x[max_idx2]
         y_dither = .75*search_radius*np.sin(new_angles_secondary[i]*u.deg) + y[max_idx2]
         dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        dithering.run_simulation(source_type, *source, report=False)
+        dithering.run_simulation(source_type, *source, report=False, \
+                                 seeing_fwhm_ref_offset=random_seeing_offsets[6+i], airmass_offset=random_airmass_offsets[6+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
@@ -141,23 +153,39 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
     except:
         #print("NO CONVERGENCE")
-        return -9999, -9999, -9999, -9999
+        return -9999, -9999, -9999, -9999, -9999, focal_x, focal_y
     #print("Optimization found the following:")
-    dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
-    dithering.run_simulation(source_type, *source, report=False)
+    ####dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
+    ####dithering.run_simulation(source_type, *source, report=False)
     #print("If there was not error (offset):")
     #dithering.place_fiber([0., 0.])
     #dithering.run_simulation(source_type, *source, report=True)
     #print("====================================================")
     #print(x_offset, y_offset, popt[1], popt[2])
-    return x_offset, y_offset, popt[1], popt[2]
-    
-config_file = "../config/desi-noblur-nooffset.yaml"
-dithering = dithering.dithering(config_file=config_file)
-search_radius = float(sys.argv[1])
-random_       = float(sys.argv[2])
-num_sources   = 200
-num_pointings = 2
+    return x_offset, y_offset, popt[1], popt[2], SNR, focal_x, focal_y
+
+parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
+parser.add_argument("-c",               dest="config", default="../config/desi-noblur-nooffset.yaml")
+parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True)
+parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True)
+parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
+parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float, default=0.5)
+parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float, default=0.0, help="RMS of the seeing offsets")
+parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=float, default=0.0, help="RMS of the airmass offsets")
+parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,   default=200)
+parsed_args = parser.parse_args()
+
+config_file       = parsed_args.config
+dithering         = dithering.dithering(config_file=config_file)
+search_radius     = parsed_args.stepsize
+random_           = parsed_args.randomoffset
+systematic_       = parsed_args.systematicoffset
+half_light_radius = parsed_args.half_light_radius
+num_sources       = parsed_args.num_sources
+seeing_offset_rms = parsed_args.seeing_offsets
+airmass_offset_rms= parsed_args.airmass_offsets
+
+num_pointings = 1
 num_total     = num_pointings * num_sources - 1
 results_b     = []
 real_values_b = []
@@ -181,12 +209,23 @@ try:
 except:
     bar = None
 
+# generate the random airmass offsets to be introduced
+# depending on the arguments given, they will be either all zeros
+# or they will have a gaussian distribution with a mean given in the config file
+# and sigma provided by David's technical note
+# same procedure will be followed for the seeing (using seeing_fwhm_ref)
+# since all the measurements of an exposure of 500 fibers would be at the same time,
+# there are only 9 offset values for each iteration of the algorithm
+random_seeing_fwhm_ref_offsets = np.random.normal(0., seeing_offset_rms,  9)*u.arcsec
+random_airmass_offsets         = np.random.normal(0., airmass_offset_rms, 9)
+
 # generate the fits file primary header
 prihdr = fits.Header()
 prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
 prihdr["COMMENT"] = "From a uniform distribution with [0, 30), random pointings were chosen"
 prihdr['COMMENT'] = "For each boresight altitude and azimuth, there are {} sources randomly located (-1, 1) degrees of the boresight.".format(num_sources)
 prihdr["COMMENT"] = "For random x and y offsets, {} um was assumed.".format(random_)
+prihdr["HLR"]     = half_light_radius
 prihdu  = fits.PrimaryHDU(header=prihdr)
 hdulist = fits.HDUList([prihdu])
 
@@ -202,6 +241,8 @@ for i in range(num_pointings):
     src_az  = np.zeros(num_sources)
     known_offset_x = np.zeros(num_sources)
     known_offset_y = np.zeros(num_sources)
+    known_systematic_x = np.zeros(num_sources)
+    known_systematic_y = np.zeros(num_sources)
     calc_offset_x = np.zeros(num_sources)
     calc_offset_y = np.zeros(num_sources)
     known_snr_r = np.zeros(num_sources)
@@ -210,17 +251,24 @@ for i in range(num_pointings):
     calc_snr_r = np.zeros(num_sources)
     calc_snr_b = np.zeros(num_sources)
     calc_snr_z = np.zeros(num_sources)
+    calc_snrs  = np.zeros((num_sources,9))
+    focal_xs   = np.zeros(num_sources)
+    focal_ys   = np.zeros(num_sources)
     
     # define the source to be observed
     source_type       = "qso"
-    half_light_radius = 0.5
+    curr_time         = time.time()
     for j in range(num_sources):
-
+        
         if bar is not None:
             bar.update((i+1)*j)
-
-        source_alt = boresight_alt + random.uniform(-1., 1.)
-        source_az  = boresight_az  + random.uniform(-1., 1.)
+        else:
+            if j%20==0:
+                print("{}: {}/{}".format(-curr_time+time.time(), j, num_sources))
+                curr_time = time.time()
+                
+        source_alt = boresight_alt + random.uniform(-.45, .45)
+        source_az  = boresight_az  + random.uniform(-.45, .45)
 
         bore_alt[j] = boresight_alt
         bore_az[j]  = boresight_az
@@ -241,26 +289,33 @@ for i in range(num_pointings):
         w_in, f_in = es.get_random_spectrum("STD_FSTAR")
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
-    
-        x_offset, y_offset, opt_x_offset, opt_y_offset  = run_simulation(dithering, source, source_alt, source_az, boresight_alt, boresight_az)
-        #print(x_offset, y_offset, opt_x_offset, opt_y_offset)
+
+        x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, focal_x, focal_y  = run_simulation(dithering, \
+                                                                                                source, source_alt, source_az, \
+                                                                                                boresight_alt, boresight_az, \
+                                                                                                random_seeing_fwhm_ref_offsets, \
+                                                                                                random_airmass_offsets)
         
         known_offset_x[j] = x_offset
         known_offset_y[j] = y_offset
+        known_systematic_x[j] = systematic_[0]
+        known_systematic_y[j] = systematic_[1]
         calc_offset_x[j] = opt_x_offset
         calc_offset_y[j] = opt_y_offset
+
+        focal_xs[j] = focal_x.value
+        focal_ys[j] = focal_y.value
         
         calc_snr_b[j] = (np.median(dithering.SNR['b'][0]))
         calc_snr_r[j] = (np.median(dithering.SNR['r'][0]))
         calc_snr_z[j] = (np.median(dithering.SNR['z'][0]))
+        calc_snrs[j]  = np.array(SNR)
         dithering.place_fiber([0., 0.])
         dithering.run_simulation(source_type, *source, report=False)
         known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
         known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
         known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
 
-        #print(calc_snr_b[j], known_snr_b[j])
-        
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
          fits.Column(name="boresight_az", array=bore_az, format="E"),
@@ -268,6 +323,8 @@ for i in range(num_pointings):
          fits.Column(name="source_az", array=src_az, format="E"),
          fits.Column(name="known_offset_x", array=known_offset_x, format="E"),
          fits.Column(name="known_offset_y", array=known_offset_y, format="E"),
+         fits.Column(name="known_systematic_x", array=known_systematic_x, format="E"),
+         fits.Column(name="known_systematic_y", array=known_systematic_y, format="E"),
          fits.Column(name="calc_offset_x", array=calc_offset_x, format="E"),
          fits.Column(name="calc_offset_y", array=calc_offset_y, format="E"),
          fits.Column(name="known_snr_b", array=known_snr_b, format="E"),
@@ -276,9 +333,12 @@ for i in range(num_pointings):
          fits.Column(name="calc_snr_b", array=calc_snr_b, format="E"),
          fits.Column(name="calc_snr_r", array=calc_snr_r, format="E"),
          fits.Column(name="calc_snr_z", array=calc_snr_z, format="E"),
+         fits.Column(name="calc_snrs", array=calc_snrs,  format="9E"),
+         fits.Column(name="focal_x", array=focal_xs, format='E'),
+         fits.Column(name="focal_y", array=focal_ys, format="E"),
         ])
     hdulist.append(thdu)
-
+    
 try:
     os.mkdir("../data/{}um_RMS".format(random_))
 except:
