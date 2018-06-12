@@ -56,7 +56,8 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     
     dithering.set_boresight_position(boresight_alt*u.deg, boresight_az*u.deg)
     dithering.set_source_position(source_alt*u.deg, source_az*u.deg)
-    dithering.set_focal_plane_position()
+    #dithering.set_focal_plane_position()
+    dithering.set_focal_position()
     dithering.set_theta_0(-5.*u.deg)
     dithering.set_phi_0(10.*u.deg)
     SNR = []
@@ -165,14 +166,15 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     return x_offset, y_offset, popt[1], popt[2], SNR, focal_x, focal_y
 
 parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
-parser.add_argument("-c",               dest="config", default="../config/desi-noblur-nooffset.yaml")
-parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True)
-parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True)
+parser.add_argument("--config",         dest="config", default="../config/desi-noblur-nooffset.yaml")
+parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True, help="Step size for the optimization algorithm")
+parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
 parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
-parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float, default=0.5)
+parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float, default=0.5, help="Half width radius of the sources")
 parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float, default=0.0, help="RMS of the seeing offsets")
 parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=float, default=0.0, help="RMS of the airmass offsets")
-parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,   default=200)
+parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,   default=200, help="Number of fibers to simulate at once")
+parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float, default=0.0, help="RMS of the positioner position")
 parsed_args = parser.parse_args()
 
 config_file       = parsed_args.config
@@ -231,8 +233,8 @@ hdulist = fits.HDUList([prihdu])
 
 for i in range(num_pointings):
     # define the observing conditions
-    boresight_alt = random.uniform(0., 30.)
-    boresight_az  = random.uniform(0., 30.)
+    boresight_alt = random.uniform(10., 30.)
+    boresight_az  = random.uniform(10., 30.)
 
     # here is what we will save in the fits file
     bore_alt = np.zeros(num_sources)
@@ -267,8 +269,8 @@ for i in range(num_pointings):
                 print("{}: {}/{}".format(-curr_time+time.time(), j, num_sources))
                 curr_time = time.time()
                 
-        source_alt = boresight_alt + random.uniform(-.45, .45)
-        source_az  = boresight_az  + random.uniform(-.45, .45)
+        source_alt = boresight_alt + random.uniform(-1.5, 1.5)
+        source_az  = boresight_az  + random.uniform(-1.5, 1.5)
 
         bore_alt[j] = boresight_alt
         bore_az[j]  = boresight_az

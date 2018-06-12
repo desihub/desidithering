@@ -34,6 +34,8 @@ import specsim.simulator as sim
 import specsim.atmosphere as atm
 import specsim.transform as trans
 
+import desimodel.focalplane as fplane
+
 ARCSEC2DEG = 0.000277778
 UM2MM      = 0.001
 
@@ -336,6 +338,22 @@ class dithering:
         self.prev_theta = 0*u.deg
         self.phi        = 0*u.deg
         self.prev_phi   = 0*u.deg
+
+    def set_focal_position(self):
+        fp  = fplane.FocalPlane()
+        fp.set_tele_pointing(self.alt_bore.value, self.az_bore.value)
+        pos = fp.radec2xy(self.alt.value, self.az.value)
+        self.focal_x = [pos[0]]*u.mm
+        self.focal_y = [pos[1]]*u.mm
+        self.fiber_x = self.focal_x
+        self.fiber_y = self.focal_y
+        self.fiber_placement = [self.focal_x.to(u.um).value-self.fiber_x.to(u.um).value, 
+                                self.focal_y.to(u.um).value-self.fiber_y.to(u.um).value]
+        self.theta      = 0*u.deg
+        self.prev_theta = 0*u.deg
+        self.phi        = 0*u.deg
+        self.prev_phi   = 0*u.deg
+        
         
     """
     Function to change the boresight position. This is done by the following transformation.
