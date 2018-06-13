@@ -115,7 +115,7 @@ instrument:
     plate_scale:
         constants:
             # Set the scale to give 1.52 arcsecs on the sky
-            value: 70.3947 um / arcsec
+            value: 67.3574 um / arcsec
     fiberloss:
         # Method for calculating fiberloss fractions.
         # Either galsim or table.
