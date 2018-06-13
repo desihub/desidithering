@@ -354,6 +354,14 @@ class dithering:
         self.phi        = 0*u.deg
         self.prev_phi   = 0*u.deg
         
+
+    def check_focal_position(self):
+        radius      = self.desi.instrument.field_radius.to(u.mm).value
+        curr_radius = np.sqrt(self.focal_x.to(u.mm).value **2 + self.focal_y.to(u.mm).value **2)
+        if curr_radius <= radius:
+            return True
+        else:
+            return False
         
     """
     Function to change the boresight position. This is done by the following transformation.

@@ -60,12 +60,16 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     dithering.set_focal_position()
     dithering.set_theta_0(-5.*u.deg)
     dithering.set_phi_0(10.*u.deg)
-    SNR = []
-    x   = []
-    y   = []
+    SNR    = []
+    signal = []
+    x      = []
+    y      = []
 
     focal_x = dithering.focal_x[0]
     focal_y = dithering.focal_y[0]
+
+    if not check_focal_position():
+        return None
     
     # initial point
     dithering.place_fiber([x_offset, y_offset])
@@ -254,6 +258,12 @@ for i in range(num_pointings):
     calc_snr_b = np.zeros(num_sources)
     calc_snr_z = np.zeros(num_sources)
     calc_snrs  = np.zeros((num_sources,9))
+    calc_signal_r = np.zeros(num_sources)
+    calc_signal_b = np.zeros(num_sources)
+    calc_signal_z = np.zeros(num_sources)
+    known_signal_r = np.zeros(num_sources)
+    known_signal_b = np.zeros(num_sources)
+    known_signal_z = np.zeros(num_sources)
     focal_xs   = np.zeros(num_sources)
     focal_ys   = np.zeros(num_sources)
     
@@ -292,31 +302,40 @@ for i in range(num_pointings):
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
 
-        x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, focal_x, focal_y  = run_simulation(dithering, \
-                                                                                                source, source_alt, source_az, \
-                                                                                                boresight_alt, boresight_az, \
-                                                                                                random_seeing_fwhm_ref_offsets, \
-                                                                                                random_airmass_offsets)
+        try:
+            x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, focal_x, focal_y  = run_simulation(dithering, \
+                                                                                                    source, source_alt, source_az, \
+                                                                                                    boresight_alt, boresight_az, \
+                                                                                                    random_seeing_fwhm_ref_offsets, \
+                                                                                                    random_airmass_offsets)
         
-        known_offset_x[j] = x_offset
-        known_offset_y[j] = y_offset
-        known_systematic_x[j] = systematic_[0]
-        known_systematic_y[j] = systematic_[1]
-        calc_offset_x[j] = opt_x_offset
-        calc_offset_y[j] = opt_y_offset
-
-        focal_xs[j] = focal_x.value
-        focal_ys[j] = focal_y.value
-        
-        calc_snr_b[j] = (np.median(dithering.SNR['b'][0]))
-        calc_snr_r[j] = (np.median(dithering.SNR['r'][0]))
-        calc_snr_z[j] = (np.median(dithering.SNR['z'][0]))
-        calc_snrs[j]  = np.array(SNR)
-        dithering.place_fiber([0., 0.])
-        dithering.run_simulation(source_type, *source, report=False)
-        known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
-        known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
-        known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
+            known_offset_x[j] = x_offset
+            known_offset_y[j] = y_offset
+            known_systematic_x[j] = systematic_[0]
+            known_systematic_y[j] = systematic_[1]
+            calc_offset_x[j] = opt_x_offset
+            calc_offset_y[j] = opt_y_offset
+            
+            focal_xs[j] = focal_x.value
+            focal_ys[j] = focal_y.value
+            
+            calc_snr_b[j] = (np.median(dithering.SNR['b'][0]))
+            calc_snr_r[j] = (np.median(dithering.SNR['r'][0]))
+            calc_snr_z[j] = (np.median(dithering.SNR['z'][0]))
+            calc_signal_b[j] = (np.median(dithering.signal['b'][0]))
+            calc_signal_r[j] = (np.median(dithering.signal['r'][0]))
+            calc_signal_z[j] = (np.median(dithering.signal['z'][0]))
+            calc_snrs[j]  = np.array(SNR)
+            dithering.place_fiber([0., 0.])
+            dithering.run_simulation(source_type, *source, report=False)
+            known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
+            known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
+            known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
+            known_signal_b[j] = (np.median(dithering.signal['b'][0]))
+            known_signal_r[j] = (np.median(dithering.signal['r'][0]))
+            known_signal_z[j] = (np.median(dithering.signal['z'][0]))
+        except:
+            j -= 1
 
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
