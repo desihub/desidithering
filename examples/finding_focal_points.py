@@ -68,7 +68,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     focal_x = dithering.focal_x[0]
     focal_y = dithering.focal_y[0]
 
-    if not check_focal_position():
+    if not dithering.check_focal_position():
         return None
     
     # initial point
