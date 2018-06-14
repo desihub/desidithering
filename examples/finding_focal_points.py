@@ -191,6 +191,7 @@ half_light_radius = parsed_args.half_light_radius
 num_sources       = parsed_args.num_sources
 seeing_offset_rms = parsed_args.seeing_offsets
 airmass_offset_rms= parsed_args.airmass_offsets
+pos_rms           = parsed_args.pos_rms
 outfname          = parsed_args.outfname
 
 num_pointings = 1
@@ -339,6 +340,13 @@ for i in range(num_pointings):
         except:
             j -= 1
 
+    hodor = fits.Header()
+    hodor['airmass_offset_rms'] = airmass_offset_rms
+    hodor['seeing_offset_rms']  = seeing_offset_rms
+    hodor['search_radiuss']     = search_radius
+    hodor['random_offset_rms']  = random_
+    hodor['positioner_error']   = pos_rms
+    
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
          fits.Column(name="boresight_az", array=bore_az, format="E"),
@@ -359,7 +367,7 @@ for i in range(num_pointings):
          fits.Column(name="calc_snrs", array=calc_snrs,  format="9E"),
          fits.Column(name="focal_x", array=focal_xs, format='E'),
          fits.Column(name="focal_y", array=focal_ys, format="E"),
-        ])
+        ], header=hodor)
     hdulist.append(thdu)
     
 try:
