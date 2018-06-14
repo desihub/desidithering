@@ -174,11 +174,12 @@ parser.add_argument("--config",         dest="config", default="../config/desi-n
 parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True, help="Step size for the optimization algorithm")
 parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
 parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
-parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float, default=0.5, help="Half width radius of the sources")
-parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float, default=0.0, help="RMS of the seeing offsets")
-parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=float, default=0.0, help="RMS of the airmass offsets")
-parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,   default=200, help="Number of fibers to simulate at once")
-parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float, default=0.0, help="RMS of the positioner position")
+parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float,  default=0.5, help="Half width radius of the sources")
+parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float,  default=0.0, help="RMS of the seeing offsets")
+parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=float,  default=0.0, help="RMS of the airmass offsets")
+parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,    default=200, help="Number of fibers to simulate at once")
+parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float,  default=0.0, help="RMS of the positioner position")
+parser.add_argument("--output:m",            dest="outfname",          type=str,    default="results")
 parsed_args = parser.parse_args()
 
 config_file       = parsed_args.config
@@ -190,6 +191,7 @@ half_light_radius = parsed_args.half_light_radius
 num_sources       = parsed_args.num_sources
 seeing_offset_rms = parsed_args.seeing_offsets
 airmass_offset_rms= parsed_args.airmass_offsets
+outfname          = parsed_args.outfname
 
 num_pointings = 1
 num_total     = num_pointings * num_sources - 1
@@ -369,8 +371,8 @@ try:
     os.mkdir("../data/{}um_RMS/{}um".format(random_, search_radius))
 except:
     print("subfolder exists.. moving on to saving the file")
-    
-temp_filename = "../data/{}um_RMS/{}um/results.fits".format(random_, search_radius)
+
+temp_filename = "../data/{}um_RMS/{}um/{}.fits".format(random_, search_radius, outfname)
 filename = temp_filename
 trial = 1
 while True:
