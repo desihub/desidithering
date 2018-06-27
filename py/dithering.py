@@ -67,7 +67,7 @@ class dithering:
         self.prev_theta  = 0*u.deg
         self.prev_phi    = 0*u.deg
         self.angle       = 0
-        self.platescale  = cfg.get_constants(cfg.instrument.plate_scale, ['value'])['value']
+        #self.platescale  = cfg.get_constants(cfg.instrument.plate_scale, ['value'])['value']
         self.verbose     = verbose
         self.output_file = output_file
         if self.output_file is not None:
@@ -75,7 +75,7 @@ class dithering:
             f.write("Output generated at : \n")
             f.close()
         # need to transform platescale to the correct units to be used in transformation function
-        self.platescale *= (UM2MM / ARCSEC2DEG)
+        #self.platescale *= (UM2MM / ARCSEC2DEG)
             
     """
     Function to generate a single source
@@ -326,6 +326,7 @@ class dithering:
         self.alt_bore = alt
         self.az_bore = az
 
+    """
     def set_focal_plane_position(self):
         focal_x, focal_y = (trans.altaz_to_focalplane(self.alt, self.az, self.alt_bore, self.az_bore, platescale=self.platescale))
         self.focal_x = [(focal_x.to(u.mm).value)]*u.mm
@@ -338,7 +339,8 @@ class dithering:
         self.prev_theta = 0*u.deg
         self.phi        = 0*u.deg
         self.prev_phi   = 0*u.deg
-
+    """
+    
     def set_focal_position(self):
         fp  = fplane.FocalPlane()
         fp.set_tele_pointing(self.alt_bore.value, self.az_bore.value)
@@ -355,9 +357,11 @@ class dithering:
         self.prev_phi   = 0*u.deg
         
 
-    def check_focal_position(self):
+    def check_focal_position(self, check=False):
         radius      = self.desi.instrument.field_radius.to(u.mm).value
         curr_radius = np.sqrt(self.focal_x.to(u.mm).value **2 + self.focal_y.to(u.mm).value **2)
+        if check is False:
+            return True
         if curr_radius <= radius:
             return True
         else:

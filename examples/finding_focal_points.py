@@ -30,8 +30,6 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
     xo = float(xo)
     yo = float(yo)
     amplitude = float(amplitude)
-    #sigma_x = random_
-    #sigma_y = random_
     g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma_x**2) + (y-yo)**2/(2*sigma_y**2) ) )
     return g.ravel()
     
@@ -40,12 +38,6 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
                                1: [-30., 90],
                                2: [-150., 90.],
                                3: [330., 210.] }
-    """
-    check_angles_secondary = { 0: {4: [30, -90],  5: [150, -90]},
-                               1: {4: [30, -90],  5: [30, 150]},
-                               2: {4: [150, -90], 5: [30, 150]},
-                               3: {4: [30, -90],  5: [150, -90]} }
-    """
     check_angles_secondary = { 0: {4: [60.0,  240.0, 330.0], 5: [120.0, 210.0, 300.0]},
                                1: {4: [60.0,  240.0, 330.0], 5: [0.0,   90.0,  180.0]},
                                2: {4: [120.0, 210.0, 300.0], 5: [0.0,   90.0,  180.0]},
@@ -76,6 +68,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[0], airmass_offset=random_airmass_offsets[0])
     SNR.append(np.median(dithering.SNR['b'][0]))
+    signal.append(np.median(dithering.signal['b'][0]))
     x.append(0)
     y.append(0)
     #print("fiber placement before test: {0}".format(dithering.fiber_placement))
@@ -90,6 +83,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[1], airmass_offset=random_airmass_offsets[1])
     SNR.append(np.median(dithering.SNR['b'][0]))
+    signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
     # -- second dither
@@ -99,6 +93,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[2], airmass_offset=random_airmass_offsets[2])
     SNR.append(np.median(dithering.SNR['b'][0]))
+    signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
     # -- third dither
@@ -108,6 +103,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[3], airmass_offset=random_airmass_offsets[3])
     SNR.append(np.median(dithering.SNR['b'][0]))
+    signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
     # -- next two dithering depends on the maximum among the ones searches
@@ -120,6 +116,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[4+i], airmass_offset=random_airmass_offsets[4+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
+        signal.append(np.median(dithering.signal['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
     if(SNR[4]>SNR[5]):
@@ -135,6 +132,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[6+i], airmass_offset=random_airmass_offsets[6+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
+        signal.append(np.median(dithering.signal['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
 
@@ -152,7 +150,7 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         plt.show()
     
     coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
-    data = np.array(SNR).ravel()
+    data = np.array(signal).ravel()
     initial_guess = (20., 0., 0., random_, random_)
     try:
         popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
@@ -160,14 +158,14 @@ def run_simulation(dithering, source, source_alt, source_az, boresight_alt, bore
         #print("NO CONVERGENCE")
         return -9999, -9999, -9999, -9999, -9999, focal_x, focal_y
     #print("Optimization found the following:")
-    ####dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
-    ####dithering.run_simulation(source_type, *source, report=False)
+    dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
+    dithering.run_simulation(source_type, *source, report=False)
     #print("If there was not error (offset):")
     #dithering.place_fiber([0., 0.])
     #dithering.run_simulation(source_type, *source, report=True)
     #print("====================================================")
     #print(x_offset, y_offset, popt[1], popt[2])
-    return x_offset, y_offset, popt[1], popt[2], SNR, focal_x, focal_y
+    return x_offset, y_offset, popt[1], popt[2], SNR, signal, focal_x, focal_y
 
 parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
 parser.add_argument("--config",         dest="config", default="../config/desi-noblur-nooffset.yaml")
@@ -260,7 +258,8 @@ for i in range(num_pointings):
     calc_snr_r = np.zeros(num_sources)
     calc_snr_b = np.zeros(num_sources)
     calc_snr_z = np.zeros(num_sources)
-    calc_snrs  = np.zeros((num_sources,9))
+    calc_snrs    = np.zeros((num_sources,9))
+    calc_signals = np.zeros((num_sources,9))
     calc_signal_r = np.zeros(num_sources)
     calc_signal_b = np.zeros(num_sources)
     calc_signal_z = np.zeros(num_sources)
@@ -306,11 +305,11 @@ for i in range(num_pointings):
         dithering.desi.source.update_out()
 
         try:
-            x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, focal_x, focal_y  = run_simulation(dithering, \
-                                                                                                    source, source_alt, source_az, \
-                                                                                                    boresight_alt, boresight_az, \
-                                                                                                    random_seeing_fwhm_ref_offsets, \
-                                                                                                    random_airmass_offsets)
+            x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, signal, focal_x, focal_y  = run_simulation(dithering, \
+                                                                                                            source, source_alt, source_az, \
+                                                                                                            boresight_alt, boresight_az, \
+                                                                                                            random_seeing_fwhm_ref_offsets, \
+                                                                                                            random_airmass_offsets)
         
             known_offset_x[j] = x_offset
             known_offset_y[j] = y_offset
@@ -328,7 +327,8 @@ for i in range(num_pointings):
             calc_signal_b[j] = (np.median(dithering.signal['b'][0]))
             calc_signal_r[j] = (np.median(dithering.signal['r'][0]))
             calc_signal_z[j] = (np.median(dithering.signal['z'][0]))
-            calc_snrs[j]  = np.array(SNR)
+            calc_snrs[j]    = np.array(SNR)
+            calc_signals[j] = np.array(signal)
             dithering.place_fiber([0., 0.])
             dithering.run_simulation(source_type, *source, report=False)
             known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
@@ -348,25 +348,32 @@ for i in range(num_pointings):
     hodor['positioner_error']   = pos_rms
     
     thdu = fits.BinTableHDU.from_columns(
-        [fits.Column(name="boresight_alt", array=bore_alt, format="E"),
-         fits.Column(name="boresight_az", array=bore_az, format="E"),
-         fits.Column(name="source_alt", array=src_alt, format="E"),
-         fits.Column(name="source_az", array=src_az, format="E"),
-         fits.Column(name="known_offset_x", array=known_offset_x, format="E"),
-         fits.Column(name="known_offset_y", array=known_offset_y, format="E"),
+        [fits.Column(name="boresight_alt",      array=bore_alt, format="E"),
+         fits.Column(name="boresight_az",       array=bore_az, format="E"),
+         fits.Column(name="source_alt",         array=src_alt, format="E"),
+         fits.Column(name="source_az",          array=src_az, format="E"),
+         fits.Column(name="known_offset_x",     array=known_offset_x, format="E"),
+         fits.Column(name="known_offset_y",     array=known_offset_y, format="E"),
          fits.Column(name="known_systematic_x", array=known_systematic_x, format="E"),
          fits.Column(name="known_systematic_y", array=known_systematic_y, format="E"),
-         fits.Column(name="calc_offset_x", array=calc_offset_x, format="E"),
-         fits.Column(name="calc_offset_y", array=calc_offset_y, format="E"),
-         fits.Column(name="known_snr_b", array=known_snr_b, format="E"),
-         fits.Column(name="known_snr_r", array=known_snr_r, format="E"),
-         fits.Column(name="known_snr_z", array=known_snr_z, format="E"),
-         fits.Column(name="calc_snr_b", array=calc_snr_b, format="E"),
-         fits.Column(name="calc_snr_r", array=calc_snr_r, format="E"),
-         fits.Column(name="calc_snr_z", array=calc_snr_z, format="E"),
-         fits.Column(name="calc_snrs", array=calc_snrs,  format="9E"),
-         fits.Column(name="focal_x", array=focal_xs, format='E'),
-         fits.Column(name="focal_y", array=focal_ys, format="E"),
+         fits.Column(name="calc_offset_x",      array=calc_offset_x, format="E"),
+         fits.Column(name="calc_offset_y",      array=calc_offset_y, format="E"),
+         fits.Column(name="known_snr_b",        array=known_snr_b, format="E"),
+         fits.Column(name="known_snr_r",        array=known_snr_r, format="E"),
+         fits.Column(name="known_snr_z",        array=known_snr_z, format="E"),
+         fits.Column(name="calc_snr_b",         array=calc_snr_b, format="E"),
+         fits.Column(name="calc_snr_r",         array=calc_snr_r, format="E"),
+         fits.Column(name="calc_snr_z",         array=calc_snr_z, format="E"),
+         fits.Column(name="calc_snrs",          array=calc_snrs,  format="9E"),
+         fits.Column(name="known_signal_b",     array=known_signal_b, format="E"),
+         fits.Column(name="known_signal_r",     array=known_signal_r, format="E"),
+         fits.Column(name="known_signal_z",     array=known_signal_z, format="E"),
+         fits.Column(name="calc_signal_b",      array=calc_signal_b, format="E"),
+         fits.Column(name="calc_signal_r",      array=calc_signal_r, format="E"),
+         fits.Column(name="calc_signal_z",      array=calc_signal_z, format="E"),
+         fits.Column(name="calc_signals",       array=calc_signals,  format="9E"),
+         fits.Column(name="focal_x",            array=focal_xs, format='E'),
+         fits.Column(name="focal_y",            array=focal_ys, format="E"),
         ], header=hodor)
     hdulist.append(thdu)
     
