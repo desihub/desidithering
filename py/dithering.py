@@ -356,7 +356,18 @@ class dithering:
         self.phi        = 0*u.deg
         self.prev_phi   = 0*u.deg
         
-
+    def set_focal_position_simple(self, x, y):
+        self.focal_x = [x]*u.mm
+        self.focal_y = [y]*u.mm
+        self.fiber_x = self.focal_x
+        self.fiber_y = self.focal_y
+        self.fiber_placement = [self.focal_x.to(u.um).value-self.fiber_x.to(u.um).value, 
+                                self.focal_y.to(u.um).value-self.fiber_y.to(u.um).value]
+        self.theta      = 0*u.deg
+        self.prev_theta = 0*u.deg
+        self.phi        = 0*u.deg
+        self.prev_phi   = 0*u.deg
+        
     def check_focal_position(self, check=False):
         radius      = self.desi.instrument.field_radius.to(u.mm).value
         curr_radius = np.sqrt(self.focal_x.to(u.mm).value **2 + self.focal_y.to(u.mm).value **2)
