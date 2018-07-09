@@ -24,6 +24,7 @@ def get_spectrum(file_idx=0, source_idx=0, output=False):
     rflux = fitsio.read(specfilename,"R_FLUX")[source_idx]
     zflux = fitsio.read(specfilename,"Z_FLUX")[source_idx]
     flux = np.hstack([bflux,rflux,zflux])
+    mag  = fitsio.read(specfilename, 1)["MAG"][source_idx]
     
     from scipy.interpolate import interp1d
     extrapolator = interp1d(wave, flux, fill_value='extrapolate')
@@ -42,7 +43,7 @@ def get_spectrum(file_idx=0, source_idx=0, output=False):
             fd.write("     {0:.3f}     {1:.4f}\n".format(wavelengths[i], fluxvalues[i]))
     if output:
         fd.close()
-    return wavelengths, fluxvalues
+    return wavelengths, fluxvalues, mag
 
 def get_random_spectrum(source_type, output=False):
     num_objs = 0
