@@ -272,6 +272,7 @@ for i in range(num_pointings):
     known_offset_y = np.zeros(num_sources)
     known_systematic_x = np.zeros(num_sources)
     known_systematic_y = np.zeros(num_sources)
+    magnitudes = np.zeros((num_sources, 5))
     calc_offset_x = np.zeros(num_sources)
     calc_offset_y = np.zeros(num_sources)
     known_snr_r = np.zeros(num_sources)
@@ -316,7 +317,7 @@ for i in range(num_pointings):
             source    = dithering.generate_source(disk_fraction=0., bulge_fraction=1., 
                                                   half_light_disk=0., half_light_bulge=half_light_radius)
 
-        w_in, f_in = es.get_random_spectrum("STD_FSTAR")
+        w_in, f_in, mag = es.get_random_spectrum("STD_FSTAR")
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
 
@@ -332,6 +333,7 @@ for i in range(num_pointings):
             known_systematic_y[j] = systematic_[1]
             calc_offset_x[j] = opt_x_offset
             calc_offset_y[j] = opt_y_offset
+            magnitudes[j] = mag
             
             focal_xs[j] = focal_x.value
             focal_ys[j] = focal_y.value
@@ -392,6 +394,7 @@ for i in range(num_pointings):
          fits.Column(name="calc_signals",       array=calc_signals,  format="9E"),
          fits.Column(name="focal_x",            array=focal_xs, format='E'),
          fits.Column(name="focal_y",            array=focal_ys, format="E"),
+         fits.Column(name="mag",                array=mag, format="E"),
         ], header=hodor)
     hdulist.append(thdu)
     
