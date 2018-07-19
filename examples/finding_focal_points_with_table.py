@@ -11,7 +11,7 @@ from astropy.io import fits
 from astropy import table
 # add dithering module to path and load it
 sys.path.append('../py')
-import dithering
+import dithering as Dithering
 import extract_spectrum as es
 import argparse
 import time
@@ -31,6 +31,17 @@ def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
     yo = float(yo)
     amplitude = float(amplitude)
     g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma_x**2) + (y-yo)**2/(2*sigma_y**2) ) )
+    return g.ravel()
+
+def twoD_ellipticGaussian(xy_tuple, amplitude, xo, yo, sigma_1, sigma_2, phi):
+    (x, y) = xy_tuple
+    xo = float(xo)
+    yo = float(yo)
+    amplitude = float(amplitude)
+    A = (np.cos(phi) / sigma_1)**2 + (np.sin(phi) / sigma_2)**2
+    B = (np.sin(phi) / sigma_1)**2 + (np.cos(phi) / sigma_2)**2
+    C = 2 * np.sin(phi) * np.cos(phi)*(1/sigma_1**2 - 1/sigma_2**2)
+    g = amplitude * np.exp( -0.5 * ( A*(x-xo)**2 + B*(y-yo)**2 + C*(x-xo)*(y-yo) ) )
     return g.ravel()
     
 def run_simulation(dithering, source, source_id, random_seeing_offsets, random_airmass_offsets, pos_rms):
@@ -73,7 +84,6 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
     signal.append(np.median(dithering.signal['b'][0]))
     x.append(0)
     y.append(0)
-    #print("fiber placement before test: {0}".format(dithering.fiber_placement))
 
     # dithering starts here
     # it is a very simple method to find the maximum point
@@ -91,6 +101,7 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
     signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
+
     # -- second dither
     x_dither = -1*search_radius*np.cos(30.*u.deg)
     y_dither = search_radius*np.sin(30.*u.deg)
@@ -104,6 +115,7 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
     signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
+    
     # -- third dither
     x_dither = 0. 
     y_dither = -1*search_radius
@@ -117,6 +129,7 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
     signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
+    
     # -- next two dithering depends on the maximum among the ones searches
     max_idx = np.argmax(SNR)
     new_angles_primary   = check_angles_primary[max_idx]
@@ -127,13 +140,15 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
             dithering.place_fiber([x_offset+x_dither+pos_x_err[4+i], y_offset+y_dither+pos_y_err[4+i]])
         else:
             dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        #dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[4+i], airmass_offset=random_airmass_offsets[4+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
         signal.append(np.median(dithering.signal['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
+        #print(np.median(dithering.SNR['b'][0]))
+        #print(x_dither, y_dither, np.median(dithering.SNR['b'][0]))
+            
     if(SNR[4]>SNR[5]):
         new_angles_secondary = check_angles_secondary[max_idx][4]
         max_idx2 = 4
@@ -147,14 +162,13 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
             dithering.place_fiber([x_offset+x_dither+pos_x_err[6+i], y_offset+y_dither+pos_y_err[6+i]])
         else:
             dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
-        #ithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[6+i], airmass_offset=random_airmass_offsets[6+i])
         SNR.append(np.median(dithering.SNR['b'][0]))
         signal.append(np.median(dithering.signal['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
-
+        
     if is_plot:
         plt.plot(x[0], y[0], 'o')
         plt.plot(x[1], y[1], '*')
@@ -169,13 +183,20 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
         plt.show()
     
     coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
-    data = np.array(signal).ravel()
-    initial_guess = (20., 0., 0., random_, random_)
+    data = np.array(SNR).ravel()
+    start_index = np.argmax(data)
+    #initial_guess = (max(SNR), x[start_index], y[start_index], 5., 5.)
+    initial_guess = (max(SNR), x[start_index], y[start_index], 5., 5., 0.)
+    print(initial_guess)
+
+    popt, pcov = opt.curve_fit(twoD_ellipticGaussian, coordinates, data, p0=initial_guess)
+    print(popt)
     try:
-        popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
+        #popt, pcov = opt.curve_fit(twoD_Gaussian, coordinates, data, p0=initial_guess)
+        popt, pcov = opt.curve_fit(twoD_ellipticGaussian, coordinates, data, p0=initial_guess)
     except:
         #print("NO CONVERGENCE")
-        return -9999, -9999, -9999, -9999, -9999, -9999, focal_x, focal_y, x, y
+        return -9999, -9999, -9999, -9999, -9999, -9999, -9999, -9999, -9999, focal_x, focal_y, x, y
     #print("Optimization found the following:")
     dithering.place_fiber([x_offset+popt[1], y_offset+popt[2]])
     dithering.run_simulation(source_type, *source, report=False)
@@ -184,7 +205,8 @@ def run_simulation(dithering, source, source_id, random_seeing_offsets, random_a
     #dithering.run_simulation(source_type, *source, report=True)
     #print("====================================================")
     #print(x_offset, y_offset, popt[1], popt[2])
-    return x_offset, y_offset, popt[1], popt[2], SNR, signal, focal_x, focal_y, x, y
+    #print("---", data[0], np.median(dithering.SNR['b'][0]), popt[0], popt[3:])
+    return x_offset, y_offset, popt[1], popt[2], popt[3], popt[4], popt[5], SNR, signal, focal_x, focal_y, x, y
 
 parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
 parser.add_argument("--config",         dest="config", default="../config/desi-noblur-nooffset.yaml")
@@ -202,7 +224,8 @@ parsed_args = parser.parse_args()
 
 config_file       = parsed_args.config
 setid             = parsed_args.setid
-dithering         = dithering.dithering(config_file=config_file)
+dithering         = Dithering.dithering(config_file=config_file)
+dithering_pure    = Dithering.dithering(config_file="../config/pure.yaml")
 search_radius     = parsed_args.stepsize
 random_           = parsed_args.randomoffset
 systematic_       = parsed_args.systematicoffset
@@ -275,6 +298,8 @@ for i in range(num_pointings):
     magnitudes = np.zeros((num_sources, 5))
     calc_offset_x = np.zeros(num_sources)
     calc_offset_y = np.zeros(num_sources)
+    calc_sigma_x = np.zeros(num_sources)
+    calc_sigma_y = np.zeros(num_sources)
     known_snr_r = np.zeros(num_sources)
     known_snr_b = np.zeros(num_sources)
     known_snr_z = np.zeros(num_sources)
@@ -308,32 +333,42 @@ for i in range(num_pointings):
                 
         # Generate the source to be observed
         if source_type == "qso" or source_type == "QSO":
-            source    = dithering.generate_source(disk_fraction=0., bulge_fraction=0., 
-                                                  half_light_disk=0., half_light_bulge=0.)
+            source = dithering.generate_source(disk_fraction=0., bulge_fraction=0., 
+                                               half_light_disk=0., half_light_bulge=0.)
         elif source_type == "elg" or source_type == "ELG":
-            source    = dithering.generate_source(disk_fraction=1., bulge_fraction=0., 
-                                                  half_light_disk=half_light_radius, half_light_bulge=0.)
+            source = dithering.generate_source(disk_fraction=1., bulge_fraction=0., 
+                                               half_light_disk=half_light_radius, half_light_bulge=0.)
         elif source_type == "lrg" or source_type == "LRG":
-            source    = dithering.generate_source(disk_fraction=0., bulge_fraction=1., 
-                                                  half_light_disk=0., half_light_bulge=half_light_radius)
+            source = dithering.generate_source(disk_fraction=0., bulge_fraction=1., 
+                                               half_light_disk=0., half_light_bulge=half_light_radius)
 
         w_in, f_in, mag = es.get_random_spectrum("STD_FSTAR")
+
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
-
-        #try:
-        if True:
-            x_offset, y_offset, opt_x_offset, opt_y_offset, SNR, signal, focal_x, focal_y, xs, ys  = run_simulation(dithering, \
-                                                                                                                    source, j, \
-                                                                                                                    random_seeing_fwhm_ref_offsets, \
-                                                                                                                    random_airmass_offsets, pos_rms)        
+        dithering_pure.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+        dithering_pure.desi.source.update_out()
+        
+        dithering_pure.set_focal_position_simple(tabled_x_pos[j], tabled_y_pos[j])
+        dithering_pure.set_theta_0(-5.*u.deg)
+        dithering_pure.set_phi_0(10.*u.deg)
+        dithering_pure.run_simulation(source_type, *source, report=False, \
+                                      seeing_fwhm_ref_offset=1e-12*u.arcsec, airmass_offset=1e-12)
+        #print("with only blur:", np.median(dithering_pure.SNR['b'][0]))
+        
+        try:
+        #if True:
+            x_offset, y_offset, opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi, SNR, signal, focal_x, focal_y, xs, ys  = \
+                run_simulation(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
             known_offset_x[j] = x_offset
             known_offset_y[j] = y_offset
             known_systematic_x[j] = systematic_[0]
             known_systematic_y[j] = systematic_[1]
             calc_offset_x[j] = opt_x_offset
             calc_offset_y[j] = opt_y_offset
-            magnitudes[j] = mag
+            calc_sigma_x[j] = opt_x_sigma
+            calc_sigma_y[j] = opt_y_sigma
+            magnitudes[j] = np.array(mag)
             
             focal_xs[j] = focal_x.value
             focal_ys[j] = focal_y.value
@@ -348,18 +383,20 @@ for i in range(num_pointings):
             dither_ys[j]    = np.array(ys)
             calc_snrs[j]    = np.array(SNR)
             calc_signals[j] = np.array(signal)
-            dithering.place_fiber([0., 0.])
-            dithering.run_simulation(source_type, *source, report=False)
-            known_snr_b[j] = (np.median(dithering.SNR['b'][0]))
-            known_snr_r[j] = (np.median(dithering.SNR['r'][0]))
-            known_snr_z[j] = (np.median(dithering.SNR['z'][0]))
-            known_signal_b[j] = (np.median(dithering.signal['b'][0]))
-            known_signal_r[j] = (np.median(dithering.signal['r'][0]))
-            known_signal_z[j] = (np.median(dithering.signal['z'][0]))
-            #except:
-        else:
-            j -= 1
-
+            #dithering.place_fiber([0., 0.])
+            #dithering.run_simulation(source_type, *source, report=False)
+            known_snr_b[j] = (np.median(dithering_pure.SNR['b'][0]))
+            known_snr_r[j] = (np.median(dithering_pure.SNR['r'][0]))
+            known_snr_z[j] = (np.median(dithering_pure.SNR['z'][0]))
+            known_signal_b[j] = (np.median(dithering_pure.signal['b'][0]))
+            known_signal_r[j] = (np.median(dithering_pure.signal['r'][0]))
+            known_signal_z[j] = (np.median(dithering_pure.signal['z'][0]))
+        except:
+        #else:
+            #j -= 1
+            #print("problem with the current fiber dithering {}... moving to the next one...".format(j))
+            continue
+        
     hodor = fits.Header()
     hodor['airmass_offset_rms'] = airmass_offset_rms
     hodor['seeing_offset_rms']  = seeing_offset_rms
@@ -378,6 +415,8 @@ for i in range(num_pointings):
          fits.Column(name="known_systematic_y", array=known_systematic_y, format="E"),
          fits.Column(name="calc_offset_x",      array=calc_offset_x, format="E"),
          fits.Column(name="calc_offset_y",      array=calc_offset_y, format="E"),
+         fits.Column(name="calc_sigma_x",       array=calc_sigma_x, format="E"),
+         fits.Column(name="calc_sigma_y",       array=calc_sigma_y, format="E"),
          fits.Column(name="known_snr_b",        array=known_snr_b, format="E"),
          fits.Column(name="known_snr_r",        array=known_snr_r, format="E"),
          fits.Column(name="known_snr_z",        array=known_snr_z, format="E"),
@@ -394,7 +433,7 @@ for i in range(num_pointings):
          fits.Column(name="calc_signals",       array=calc_signals,  format="9E"),
          fits.Column(name="focal_x",            array=focal_xs, format='E'),
          fits.Column(name="focal_y",            array=focal_ys, format="E"),
-         fits.Column(name="mag",                array=mag, format="E"),
+         fits.Column(name="mag",                array=magnitudes, format="5E"),
         ], header=hodor)
     hdulist.append(thdu)
     
