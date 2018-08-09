@@ -481,6 +481,8 @@ for i in range(num_pointings):
          fits.Column(name="calc_signal_b",      array=calc_signal_b, format="E"),
          fits.Column(name="calc_signal_r",      array=calc_signal_r, format="E"),
          fits.Column(name="calc_signal_z",      array=calc_signal_z, format="E"),
+         fits.Column(name="dither_pos_x",       array=dither_xs,  format="9E"),
+         fits.Column(name="dither_pos_y",       array=dither_ys,  format="9E"),
          fits.Column(name="calc_signals",       array=calc_signals,  format="9E"),
          fits.Column(name="focal_x",            array=focal_xs, format='E'),
          fits.Column(name="focal_y",            array=focal_ys, format="E"),
