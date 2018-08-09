@@ -402,7 +402,7 @@ for i in range(num_pointings):
             focal_x  = tabled_x_pos[j]
             focal_y  = tabled_y_pos[j]
 
-            if pattern = 1:
+            if pattern == 1:
                 xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
             else:
                 xs, ys, signals, SNRs = run_simulation_triangulate(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
