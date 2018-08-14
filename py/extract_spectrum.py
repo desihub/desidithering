@@ -43,7 +43,7 @@ def get_spectrum(file_idx=0, source_idx=0, output=False):
             fd.write("     {0:.3f}     {1:.4f}\n".format(wavelengths[i], fluxvalues[i]))
     if output:
         fd.close()
-    return wavelengths, fluxvalues, mag
+    return wavelengths, fluxvalues, np.array(mag)
 
 def get_random_spectrum(source_type, output=False):
     num_objs = 0

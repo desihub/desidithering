@@ -309,6 +309,8 @@ if airmass_offset_rms<0.01:
 else:
     random_airmass_offsets         = np.random.normal(0., airmass_offset_rms, 9)
 
+print(random_seeing_fwhm_ref_offsets)
+    
 # generate the fits file primary header
 prihdr = fits.Header()
 prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
@@ -408,7 +410,7 @@ for i in range(num_pointings):
                 xs, ys, signals, SNRs = run_simulation_triangulate(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
 
             opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi= fit_simulation(xs, ys, signals, SNRs)
-            print(opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi)
+            #print(opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi)
             dithering.place_fiber([x_offset+opt_x_offset, y_offset+opt_y_offset])
             dithering.run_simulation(source_type, *source, report=False)
             
@@ -454,6 +456,15 @@ for i in range(num_pointings):
     hodor['search_radiuss']     = search_radius
     hodor['random_offset_rms']  = random_
     hodor['positioner_error']   = pos_rms
+    hodor['seeing_offset_0']    = random_seeing_fwhm_ref_offsets[0].value
+    hodor['seeing_offset_1']    = random_seeing_fwhm_ref_offsets[1].value
+    hodor['seeing_offset_2']    = random_seeing_fwhm_ref_offsets[2].value
+    hodor['seeing_offset_3']    = random_seeing_fwhm_ref_offsets[3].value
+    hodor['seeing_offset_4']    = random_seeing_fwhm_ref_offsets[4].value
+    hodor['seeing_offset_5']    = random_seeing_fwhm_ref_offsets[5].value
+    hodor['seeing_offset_6']    = random_seeing_fwhm_ref_offsets[6].value
+    hodor['seeing_offset_7']    = random_seeing_fwhm_ref_offsets[7].value
+    hodor['seeing_offset_8']    = random_seeing_fwhm_ref_offsets[8].value
     
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="boresight_alt",      array=bore_alt, format="E"),

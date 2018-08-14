@@ -181,7 +181,6 @@ class dithering:
         # Tabulate seeing.
         self.desi.atmosphere.seeing_fwhm_ref = seeing
         seeing_fwhm = self.desi.atmosphere.get_seeing_fwhm(self.wlen_grid).to(u.arcsec).value
-        print(seeing_fwhm)
         # Calculate optics.
         scale, blur, offset = self.desi.instrument.get_focal_plane_optics(self.focal_x, self.focal_y, self.wlen_grid)
         # Do the fiberloss calculations.

@@ -22,7 +22,7 @@ y_offsets = np.random.normal(0.0, scale=offset_rms, size=num_fibers)
 # they are linearly distributed but basically can follow any pattern
 #r_pos   = np.linspace(0, focal_plane_radius, int(num_fibers/num_theta))
 #r_pos   = np.random.triangular(0, focal_plane_radius, focal_plane_radius, int(num_fibers/num_theta))
-r_pos   = focal_plane_radius*np.random.power(3, size=num_fibers)
+r_pos   = focal_plane_radius*np.random.power(2, size=num_fibers)
 phi_pos = 2*math.pi*np.random.uniform(size=num_fibers)#np.linspace(-np.pi, np.pi, num_theta)
 x_pos   = r_pos * np.cos(phi_pos)
 y_pos   = r_pos * np.sin(phi_pos)
