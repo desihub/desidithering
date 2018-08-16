@@ -58,6 +58,7 @@ class dithering:
         self.num_wlen    = len(wavelength)
         self.wlen_grid   = np.linspace(wavelength.data[0], wavelength.data[-1], self.num_wlen) * wlen_unit
         self.pointing    = self.desi.observation.pointing
+        self.seeing_ref  = self.desi.atmosphere.seeing_fwhm_ref
         self.place_fiber([0., 0.])
         self.radius      = 3*u.mm
         self.theta       = 0*u.deg
@@ -272,12 +273,18 @@ class dithering:
                        source_minor_major_axis_ratio, source_position_angle, report=True, seeing_fwhm_ref_offset=0*u.arcsec,
                        airmass_offset=0):
         # store the variables in a local variable to revert back at the end
-        org_seeing_fwhm_ref = self.desi.atmosphere.seeing_fwhm_ref
-        org_airmass         = self.desi.atmosphere.airmass
-        self.desi.atmosphere.seeing_fwhm_ref += seeing_fwhm_ref_offset
-        self.desi.atmosphere.airmass         += airmass_offset
+        #start_time = time.time()
+        #org_seeing_fwhm_ref = self.desi.atmosphere.seeing_fwhm_ref
+        #org_airmass         = self.desi.atmosphere.airmass
+        self.desi.atmosphere.seeing_fwhm_ref = self.seeing_ref + seeing_fwhm_ref_offset
+        #self.desi.atmosphere.airmass         += airmass_offset
+        #print(self.desi.atmosphere.seeing_fwhm_ref)
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
+        #print(time.time()-start_time)
+        start_time = time.time()
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
+        #print(time.time()-start_time)
+        #start_time = time.time()
         self.SNR = {}
         self.signal = {}
         for output in self.desi.camera_output:
@@ -288,10 +295,11 @@ class dithering:
         if report:
             self.report(simple=False)
         # variables are restored using the local storage variables
-        self.desi.atmosphere.seeing_fwhm_ref = org_seeing_fwhm_ref
-        self.desi.atmosphere.airmass         = org_airmass
-        del org_seeing_fwhm_ref
-        del org_airmass
+        #self.desi.atmosphere.seeing_fwhm_ref = org_seeing_fwhm_ref
+        #self.desi.atmosphere.airmass         = org_airmass
+        #print(self.desi.atmosphere.seeing_fwhm_ref)
+        #del org_seeing_fwhm_ref
+        #del org_airmass
         
     def report(self, simple=True):
         if self.output_file is not None:
