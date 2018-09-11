@@ -165,8 +165,6 @@ for iSource in range(num_sources):
     signals = calc_signals[iSource]
     SNRs = calc_snrs[iSource]
     opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi= fit_simulation(xs, ys, signals, SNRs)
-
-    print(opt_x_offset, opt_y_offset)
     
     focal_xs[iSource] = data['focal_x'][iSource]
     focal_ys[iSource] = data['focal_y'][iSource]
