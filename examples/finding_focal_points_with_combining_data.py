@@ -75,7 +75,7 @@ parser.add_argument("--step-size",      dest="stepsize",         type=float, req
 parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
 parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float,  default=0.0, help="RMS of the seeing offsets")
 parser.add_argument("--dithering_pattern",   dest="pattern",           type=int,    default=0,   help="Dithering pattern, 0: triangular, 1: rectangular")
-parser.add_argument("--output:m",            dest="outfname",          type=str,    default="results")
+parser.add_argument("--output",              dest="outfname",          type=str,    default="results")
 parsed_args = parser.parse_args()
 
 search_radia      = parsed_args.stepsize
