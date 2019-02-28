@@ -10,10 +10,9 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from astropy.io import fits
 from astropy import table
-# add dithering module to path and load it
-sys.path.append('../py')
-import dithering as Dithering
-import extract_spectrum as es
+
+from desidithering import dithering as Dithering
+from desidithering import extract_spectrum as es
 import argparse
 import time
 

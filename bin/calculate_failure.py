@@ -1,8 +1,9 @@
 import numpy as np
-from  astropy.io import fits
+from astropy.io import fits
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 import matplotlib as mpl
+
 # general plotting options
 rcParams.update({'figure.autolayout': True})
 my_cmap = plt.cm.jet
