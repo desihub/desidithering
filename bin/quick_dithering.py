@@ -8,8 +8,7 @@ import yaml
 import random
 import sys
 import matplotlib.pyplot as plt
-# add dithering module to path and load it
-sys.path.append('./py')
+
 import dithering
 
 parser = argparse.ArgumentParser(description="This is a script to run dithering on different sources with different dithering options")
