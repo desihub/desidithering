@@ -23,12 +23,12 @@ setup_keywords = dict()
 #
 # THESE SETTINGS NEED TO BE CHANGED FOR EVERY PRODUCT.
 #
-setup_keywords['name'] = 'desisim'
+setup_keywords['name'] = 'desidithering'
 setup_keywords['description'] = 'DESI simulation package'
 setup_keywords['author'] = 'DESI Collaboration'
 setup_keywords['author_email'] = 'desi-data@desi.lbl.gov'
 setup_keywords['license'] = 'BSD'
-setup_keywords['url'] = 'https://github.com/desihub/desisim'
+setup_keywords['url'] = 'https://github.com/desihub/desidithering'
 #
 # END OF SETTINGS THAT NEED TO BE CHANGED.
 #
@@ -65,7 +65,7 @@ setup_keywords['test_suite']='{name}.test.test_suite'.format(**setup_keywords)
 #
 # Add internal data directories.
 #
-setup_keywords['package_data'] = {'desisim': ['data/*', 'test/data/*']}
+setup_keywords['package_data'] = {'desidithering': ['data/*', 'test/data/*']}
 #
 # Run setup command.
 #
