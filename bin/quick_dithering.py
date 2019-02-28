@@ -9,7 +9,7 @@ import random
 import sys
 import matplotlib.pyplot as plt
 
-import dithering
+from desidithering import dithering
 
 parser = argparse.ArgumentParser(description="This is a script to run dithering on different sources with different dithering options")
 parser.add_argument("-y", dest="yaml", help="A yaml file that has the information for running.", required=True)
