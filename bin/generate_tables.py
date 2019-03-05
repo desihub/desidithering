@@ -4,8 +4,8 @@ import random
 import sys
 import math
 import astropy.units as u
-sys.path.append('../py')
-import extract_spectrum as es
+
+from desdithering import extract_spectrum as es
 
 offset_rms = float(sys.argv[1])
 
