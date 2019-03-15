@@ -2,7 +2,7 @@ name: DESI QuickSim
 
 # The base path is pre-pended to all non-absolute path values below.
 # {...} will be expanded using environment variables.
-base_path: '/scratch/sbenzvi_lab/desi/tyapici/desidithering/config'
+base_path: '{DESI_SPECTRO_DATA}/'
 
 # Be verbose during the simulation?
 verbose: no
