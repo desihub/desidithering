@@ -73,7 +73,7 @@ setup_keywords['package_data'] = {'desidithering': ['data/*', 'test/data/*']}
 with open('config/desi-noblur-nooffset.yaml.tmp', 'r') as file :
   filedata = file.read()
 # Replace the target string
-abs_path = os.path.abspath("setup.py")
+abs_path = os.path.abspath(".")
 filedata = filedata.replace('%%%PATH%%%', abs_path)
 # Write the file out again
 with open('config/desi-noblur-nooffset.yaml', 'w') as file:
