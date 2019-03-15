@@ -259,7 +259,7 @@ parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,
 parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float,  default=0.0, help="RMS of the positioner position")
 parser.add_argument("--dithering_pattern",   dest="pattern",           type=int,    default=0,   help="Dithering pattern, 0: triangular, 1: rectangular")
 parser.add_argument("--output",              dest="outfname",          type=str,    default="results")
-parser.add_argument("--prefix",              dest="prefix",            type=str,    default="" required=False, help="The prefix for the output directory")
+parser.add_argument("--prefix",              dest="prefix",            type=str,    default="",  required=False, help="The prefix for the output directory")
 parsed_args = parser.parse_args()
 
 config_file       = parsed_args.config
@@ -278,6 +278,7 @@ pattern           = parsed_args.pattern
 LUT_filename      = parsed_args.LUT
 prefix            = parsed_args.prefix
 
+tabled_values = np.load(LUT_filename)
 tabled_x_pos  = tabled_values['x_pos'][setid*500:(setid+4)*500]
 tabled_y_pos  = tabled_values['y_pos'][setid*500:(setid+4)*500]
 tabled_x_offsets = tabled_values['x_offsets'][setid*500:(setid+4)*500]
