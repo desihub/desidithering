@@ -248,7 +248,6 @@ parser = argparse.ArgumentParser(description="Script to find the optimal focal p
 parser.add_argument("--config",         dest="config", default="config/desi-noblur-nooffset.yaml")
 parser.add_argument("--setid",          dest="setid",  default=0, type=int)
 parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True, help="Step size for the optimization algorithm")
-#parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
 parser.add_argument("--lookupTable",    dest="LUT",              type=str, required=True, help="The table file to run the analysis")
 parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
 parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float,  default=0.5, help="Half width radius of the sources")
@@ -257,7 +256,8 @@ parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=floa
 parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,    default=200, help="Number of fibers to simulate at once")
 parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float,  default=0.0, help="RMS of the positioner position")
 parser.add_argument("--dithering_pattern",   dest="pattern",           type=int,    default=0,   help="Dithering pattern, 0: triangular, 1: rectangular")
-parser.add_argument("--output:m",            dest="outfname",          type=str,    default="results")
+parser.add_argument("--output",              dest="outfname",          type=str,    default="results")
+parser.add_argument("--prefix",              dest="prefix",            type=str,    default="" required=False, help="The prefix for the output directory")
 parsed_args = parser.parse_args()
 
 config_file       = parsed_args.config
@@ -274,8 +274,8 @@ pos_rms           = parsed_args.pos_rms
 outfname          = parsed_args.outfname
 pattern           = parsed_args.pattern
 LUT_filename      = parsed_args.LUT
+prefix            = parsed_args.prefix
 
-tabled_values = np.load(LUT_filename)#'tabled_values_{}.npz'.format(random_))
 tabled_x_pos  = tabled_values['x_pos'][setid*500:(setid+4)*500]
 tabled_y_pos  = tabled_values['y_pos'][setid*500:(setid+4)*500]
 tabled_x_offsets = tabled_values['x_offsets'][setid*500:(setid+4)*500]
@@ -327,7 +327,6 @@ prihdr = fits.Header()
 prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
 prihdr["COMMENT"] = "From a uniform distribution with [0, 30), random pointings were chosen"
 prihdr['COMMENT'] = "For each boresight altitude and azimuth, there are {} sources randomly located (-1, 1) degrees of the boresight.".format(num_sources)
-prihdr["COMMENT"] = "For random x and y offsets, {} um was assumed.".format(random_)
 prihdr["HLR"]     = half_light_radius
 prihdu  = fits.PrimaryHDU(header=prihdr)
 hdulist = fits.HDUList([prihdu])
@@ -393,7 +392,6 @@ for i in range(num_pointings):
             source = dithering.generate_source(disk_fraction=0., bulge_fraction=1., 
                                                half_light_disk=0., half_light_bulge=half_light_radius)
 
-        #w_in, f_in, mag = es.get_random_spectrum("STD_FSTAR")
         w_in = tabled_wlens[j]
         f_in = tabled_fluxes[j]
         mag  = tabled_mags[j]
@@ -477,7 +475,6 @@ for i in range(num_pointings):
     hodor['airmass_offset_rms'] = airmass_offset_rms
     hodor['seeing_offset_rms']  = seeing_offset_rms
     hodor['search_radiuss']     = search_radius
-    hodor['random_offset_rms']  = random_
     hodor['positioner_error']   = pos_rms
     hodor['seeing_offset_0']    = random_seeing_fwhm_ref_offsets[0].value
     hodor['seeing_offset_1']    = random_seeing_fwhm_ref_offsets[1].value
@@ -525,16 +522,16 @@ for i in range(num_pointings):
     hdulist.append(thdu)
     
 try:
-    os.mkdir("../data/{}um_RMS".format(random_))
+    os.mkdir("{}/data/".format(prefix))
 except:
     print("main folder exists... checking the subfolder...")
 
 try:
-    os.mkdir("../data/{}um_RMS/{}um".format(random_, search_radius))
+    os.mkdir("{}/data/{}um".format(prefix, search_radius))
 except:
     print("subfolder exists.. moving on to saving the file")
 
-temp_filename = "../data/{}um_RMS/{}um/{}.fits".format(random_, search_radius, outfname)
+temp_filename = "{}/data/{}um/{}.fits".format(prefix, search_radius, outfname)
 filename = temp_filename
 trial = 1
 while True:
