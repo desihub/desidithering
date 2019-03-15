@@ -245,10 +245,11 @@ def fit_simulation(x, y, signal, SNR):
     return popt[1], popt[2], popt[3], popt[4], popt[5]
 
 parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
-parser.add_argument("--config",         dest="config", default="../config/desi-noblur-nooffset.yaml")
+parser.add_argument("--config",         dest="config", default="config/desi-noblur-nooffset.yaml")
 parser.add_argument("--setid",          dest="setid",  default=0, type=int)
 parser.add_argument("--step-size",      dest="stepsize",         type=float, required=True, help="Step size for the optimization algorithm")
-parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
+#parser.add_argument("--offset-rms",     dest="randomoffset",     type=float, required=True, help="Random offsets to be introducted")
+parser.add_argument("--lookupTable",    dest="LUT",              type=str, required=True, help="The table file to run the analysis")
 parser.add_argument("--systematic",     dest="systematicoffset", type=float, default=[0.0, 0.0], nargs=2)
 parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float,  default=0.5, help="Half width radius of the sources")
 parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float,  default=0.0, help="RMS of the seeing offsets")
@@ -262,9 +263,8 @@ parsed_args = parser.parse_args()
 config_file       = parsed_args.config
 setid             = parsed_args.setid
 dithering         = Dithering.dithering(config_file=config_file)
-dithering_pure    = Dithering.dithering(config_file="../config/pure.yaml")
+dithering_pure    = Dithering.dithering(config_file="config/desi-noblur-nooffset.yaml")
 search_radius     = parsed_args.stepsize
-random_           = parsed_args.randomoffset
 systematic_       = parsed_args.systematicoffset
 half_light_radius = parsed_args.half_light_radius
 num_sources       = parsed_args.num_sources
@@ -273,8 +273,9 @@ airmass_offset_rms= parsed_args.airmass_offsets
 pos_rms           = parsed_args.pos_rms
 outfname          = parsed_args.outfname
 pattern           = parsed_args.pattern
+LUT_filename      = parsed_args.LUT
 
-tabled_values = np.load('tabled_values_{}.npz'.format(random_))
+tabled_values = np.load(LUT_filename)#'tabled_values_{}.npz'.format(random_))
 tabled_x_pos  = tabled_values['x_pos'][setid*500:(setid+4)*500]
 tabled_y_pos  = tabled_values['y_pos'][setid*500:(setid+4)*500]
 tabled_x_offsets = tabled_values['x_offsets'][setid*500:(setid+4)*500]
