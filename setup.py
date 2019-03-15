@@ -67,6 +67,18 @@ setup_keywords['test_suite']='{name}.test.test_suite'.format(**setup_keywords)
 #
 setup_keywords['package_data'] = {'desidithering': ['data/*', 'test/data/*']}
 #
+# Before we run the install, we change the placeholder in one of the configuration files here
+#
+# Read in the file
+with open('config/desi-noblur-nooffset.yaml.tmp', 'r') as file :
+  filedata = file.read()
+# Replace the target string
+abs_path = os.path.abspath("setup.py")
+filedata = filedata.replace('%%%PATH%%%', abs_path)
+# Write the file out again
+with open('config/desi-noblur-nooffset.yaml', 'w') as file:
+  file.write(filedata)
+#
 # Run setup command.
 #
 setup(**setup_keywords)
