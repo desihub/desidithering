@@ -2,7 +2,7 @@ name: DESI QuickSim
 
 # The base path is pre-pended to all non-absolute path values below.
 # {...} will be expanded using environment variables.
-base_path: '{DESIMODEL}/data'
+base_path: '/scratch/sbenzvi_lab/desi/tyapici/desidithering/config'
 
 # Be verbose during the simulation?
 verbose: no
@@ -26,7 +26,7 @@ wavelength_grid:
     unit: Angstrom
     min: 3550.0
     max: 9850.0
-    step: 0.5
+    step: 0.1
 
 # The atmosphere configuration is interpreted and validated by the
 # specsim.atmosphere module.
@@ -78,7 +78,7 @@ atmosphere:
             format: ascii.basic
         constants:
             # Phase of the moon from 0 (full) to 1 (new).
-            moon_phase: 1.0
+            moon_phase: 0.5
             # Zenith angles of the moon. An angle > 90 (below the horizon)
             # will zero the scattered moon contribution.
             moon_zenith: 100 deg
@@ -113,9 +113,16 @@ instrument:
         fiber_diameter: 107.0 um
         field_radius: 414.0 mm
     plate_scale:
-        constants:
+        ##constants:
             # Set the scale to give 1.52 arcsecs on the sky
-            value: 70.3947 um / arcsec
+            ##value: 70.3947 um / arcsec
+        table:
+            path: focalplane/platescale.txt
+            format: ascii
+            columns:
+                radius: { index: 0, unit: mm }
+                radial_scale: { index: 6, unit: um/arcsec }
+                azimuthal_scale: { index: 7, unit: um/arcsec }
     fiberloss:
         # Method for calculating fiberloss fractions.
         # Either galsim or table.
@@ -130,28 +137,25 @@ instrument:
         # Read RMS blur values tabulated as a function of field angle and
         # wavelength, and derived from ray tracing simulations.  For details,
         # see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
-        # -> this one is for no blue
-        #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_noblur.ecsv
-        # -> this one if for blur
-        path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
+        path: throughput/DESI-0347_blur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
         format: ascii.ecsv
     offset:
         # Corresponds to 0.2 arcsec with the fixed plate scale above.
         # Always in the radial direction.
-        value: 0.0 micron
+        ##value: 0.0 micron
         # Read radial centroid offsets tabulated as a function of field angle
         # and wavelength, and derived from ray tracing simulations.  For
         # details, see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
-        ##path: throughput/DESI-0347_offset.ecsv
+        path: throughput/DESI-0347_offset.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
-        ##format: ascii.ecsv
+        format: ascii.ecsv
         # Read random achromatic centroid offsets from a FITS file.
         # Uncomment any one of these lines to select a different random set.
         # No random offsets are applied if all lines are commented out.
         #random: throughput/DESI-0347_random_offset_1.fits
         #random: throughput/DESI-0347_random_offset_2.fits
-        #random: throughput/DESI-0347_random_offset_3.fits
+        random: throughput/DESI-0347_random_offset_3.fits
     cameras:
         b:
             constants:
@@ -273,7 +277,8 @@ source:
     type: qso
     table:
         format: ascii
-        path: /home/tyapici/DESI_Projects/desidithering/py/fstar_spectrum.dat
+        path: spectra/spec-ABmag22.0.dat
+        #path: /home/tyapici/DESI_Projects/desidithering/py/fstar_spectrum.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:
@@ -282,11 +287,9 @@ source:
                 unit: 1e-17 erg / (Angstrom cm2 s)
     # Transverse profile of the source on the sky, used to calculate the
     # fiberloss fraction when instrument.fiberloss.method = galsim (but
-    # ignored otherwise)
-    # these are over-written with the values in the other main config file.
-    # however the logic needs to stay (disk_fraction+bulge_fraction)<=1.0
+    # ignored otherwise).
     profile:
-        disk_fraction: 0.0
+        disk_fraction: 1.0
         bulge_fraction: 0.0
         disk_shape:
             half_light_radius: 0.45 arcsec
@@ -323,7 +326,7 @@ source:
 observation:
     observatory: KPNO
     constants:
-        exposure_time: 1800.0 s
+        exposure_time: 1000.0 s
         # Atmospheric pressure at the telescope (not at sea level) used
         # to calculate atmospheric refraction.  Leave commented out to use a
         # nominal value calculated for the observatory elevation.
