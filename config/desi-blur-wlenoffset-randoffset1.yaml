@@ -2,7 +2,7 @@ name: DESI QuickSim
 
 # The base path is pre-pended to all non-absolute path values below.
 # {...} will be expanded using environment variables.
-base_path: $DESI_SPECTRO_DATA
+base_path: '{DESI_SPECTRO_DATA}/'
 
 # Be verbose during the simulation?
 verbose: yes
