@@ -130,10 +130,7 @@ instrument:
         # Read RMS blur values tabulated as a function of field angle and
         # wavelength, and derived from ray tracing simulations.  For details,
         # see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
-        # -> this one is for no blue
-        path: ./DESI-0347_noblur.ecsv
-        # -> this one if for blur
-        #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
+        path: /gpfs/fs2/scratch/sbenzvi_lab/desi/tyapici/desidithering-master/data/DESI-0347_noblur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
         format: ascii.ecsv
     offset:
@@ -274,7 +271,6 @@ source:
     table:
         format: ascii
         path: spectra/spec-ABmag22.0.dat
-        #/home/tyapici/DESI_Projects/desidithering/data/STD_FSTAR_spectrum_1.dat
         columns:
             wavelength: { index: 0, unit: Angstrom }
             flux:
