@@ -2,7 +2,7 @@ name: DESI QuickSim
 
 # The base path is pre-pended to all non-absolute path values below.
 # {...} will be expanded using environment variables.
-base_path: '{DESIMODEL}/data'
+base_path: '{DESI_SPECTRO_DATA}/'
 
 # Be verbose during the simulation?
 verbose: no
@@ -131,7 +131,7 @@ instrument:
         # wavelength, and derived from ray tracing simulations.  For details,
         # see $DESIMODEL/doc/nb/DESI-0347_Throughput.ipynb.
         # -> this one is for no blue
-        path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_noblur.ecsv
+        path: ./DESI-0347_noblur.ecsv
         # -> this one if for blur
         #path: /home/tyapici/Projects/desi/data/throughput/DESI-0347_blur.ecsv
         # The ECSV format is not auto-detected so we specify it explicitly.
