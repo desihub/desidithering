@@ -524,17 +524,20 @@ for i in range(num_pointings):
         ], header=hodor)
     hdulist.append(thdu)
     
+os.mkdir("{}/".format(prefix))
 try:
-    os.mkdir("{}/data/".format(prefix))
+    print("making directory: {}/data".format(prefix))
+    os.mkdir("{}/".format(prefix))
 except:
     print("main folder exists... checking the subfolder...")
 
 try:
-    os.mkdir("{}/data/{}um".format(prefix, search_radius))
+    print("making directory: {}/data/{}um".format(prefix, search_radius))
+    os.mkdir("{}/{}um".format(prefix, search_radius))
 except:
     print("subfolder exists.. moving on to saving the file")
 
-temp_filename = "{}/data/{}um/{}.fits".format(prefix, search_radius, outfname)
+temp_filename = "{}/{}um/{}.fits".format(prefix, search_radius, outfname)
 filename = temp_filename
 trial = 1
 while True:
@@ -543,4 +546,5 @@ while True:
         trial = trial + 1
     else:
         break
+print(filename)
 hdulist.writeto(filename)
