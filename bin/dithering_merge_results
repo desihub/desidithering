@@ -1,0 +1,42 @@
+#!/bin/python
+
+from astropy.io import fits
+from astropy.table import Table, vstack
+import argparse
+import numpy
+import glob
+import sys
+
+search_radii = [3.0, 6.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 100.0]
+seeings = [0.01, 0.05, 0.1]
+pattern = "triangle"
+
+parser = argparse.ArgumentParser(description="Script to merge dithering_signals outputs")
+parser.add_argument("-p", "--prefix", 
+                    required=True)
+parser.add_argument("-s", "--seeing", 
+                    required=False,
+                    default=0.1)
+parser.add_argument('-t', '--template',
+                    required=False,
+                    default='template1')
+parser.add_argument('-a', '--pattern',
+                    required=False,
+                    default='triangle')
+parsed_args = parser.parse_args()
+
+folder_list  = glob.glob("{}/*".format(parsed_args.prefix))
+for folder in folder_list:
+    files = glob.glob("{}/*{}*seeing{}_*{}*".format(folder, parsed_args.pattern, parsed_args.seeing, parsed_args.template))
+    hdus  = fits.open(files[0])
+    table = Table(hdus[1].data)
+    hdus.close()
+    for filename in files[1:]:
+        hdus = fits.open(filename)
+        table_to_add = Table(hdus[1].data)
+        table = vstack([table, table_to_add])
+        hdus.close()
+    new_filename = "_".join(files[0].split("_")[:6])+"_combined_"+"_".join(files[0].split("_")[7:])
+    print("merging files into: {}".format(new_filename))
+    table.write(new_filename, format="fits")
+
