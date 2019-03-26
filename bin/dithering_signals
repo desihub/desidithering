@@ -313,18 +313,16 @@ except:
 # same procedure will be followed for the seeing (using seeing_fwhm_ref)
 # since all the measurements of an exposure of 500 fibers would be at the same time,
 # there are only 9 offset values for each iteration of the algorithm
-if seeing_offset_rms<0.01:
+if seeing_offset_rms<0.0001:
     random_seeing_fwhm_ref_offsets = np.zeros(9)*u.arcsec
 else:
-    random_seeing_fwhm_ref_offsets = (np.random.lognormal(mean=0., sigma=seeing_offset_rms, size=9)-0.98)*u.arcsec
+    random_seeing_fwhm_ref_offsets = (np.random.lognormal(mean=0., sigma=seeing_offset_rms, size=9)-1.00)*u.arcsec
 
 if airmass_offset_rms<0.01:
     random_airmass_offsets         = np.zeros(9)
 else:
     random_airmass_offsets         = np.random.normal(0., airmass_offset_rms, 9)
 
-print(random_seeing_fwhm_ref_offsets)
-    
 # generate the fits file primary header
 prihdr = fits.Header()
 prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
