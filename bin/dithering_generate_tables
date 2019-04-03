@@ -40,7 +40,7 @@ fluxes = []
 mags   = []
 for i in range(num_fibers):
     if i%5==0:
-        w_in, f_in, mag = es.get_random_spectrum("STD_FSTAR")
+        w_in, f_in, mag = es.get_random_spectrum("STD_BRIGHT")
         if mag[0]>21. or mag[0]<9.:
             i -= 1
             continue
