@@ -44,7 +44,7 @@ def get_spectrum(file_idx=0, source_idx=0, output=False):
         fd.close()
     return wavelengths, fluxvalues, np.array(mag)
 
-def get_random_spectrum(source_type, output=False):
+def get_random_spectrum(source_type="STD_BRIGHT", output=False):
     num_objs = 0
     while num_objs<=0:
         file_idx = random.randint(0, len(specfilenames)-1)
