@@ -5,7 +5,7 @@ import numpy as np
 import healpy as hp
 from glob import glob
 from collections import defaultdict
-from desitarget import desi_mask
+from desitarget.targetmask import desi_mask
 import matplotlib.pyplot as plt
 
 os.environ["DESI_SPECTRO_REDUX"] = "/home/tyapici/data/DESI/spectro/redux/"
