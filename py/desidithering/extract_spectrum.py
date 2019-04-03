@@ -8,10 +8,9 @@ from collections import defaultdict
 from desitarget.targetmask import desi_mask
 import matplotlib.pyplot as plt
 
-os.environ["DESI_SPECTRO_REDUX"] = "/home/tyapici/data/DESI/spectro/redux/"
-os.environ["SPECPROD"] = "dc17a2"
+os.environ["STAR_SPECTRA"] = "spectro/datachallenge/dc17b/spectro/redux/dc17b/spectra-64"
 
-basedir = os.path.join(os.getenv("DESI_SPECTRO_REDUX"),os.getenv("SPECPROD"),"spectra-64")
+basedir = os.path.join(os.getenv("DESI_ROOT"),os.getenv("STAR_SPECTRA"))
 specfilenames = glob(basedir+"/*/*/spectra*")
 
 def get_spectrum(file_idx=0, source_idx=0, output=False):
@@ -57,4 +56,4 @@ def get_random_spectrum(source_type, output=False):
     return get_spectrum(file_idx, source_idx, output)
 
 if __name__=="__main__":
-    print(get_random_spectrum("STD_FSTAR", 0))
+    print(get_random_spectrum("STD_BRIGHT", 0))
