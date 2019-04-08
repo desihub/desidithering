@@ -396,6 +396,7 @@ for i in range(num_pointings):
         w_in = tabled_wlens[j]
         f_in = tabled_fluxes[j]
         mag  = tabled_mags[j]
+        
         dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
         dithering_pure.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
