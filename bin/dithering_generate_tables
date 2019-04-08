@@ -7,12 +7,12 @@ import sys
 import math
 import astropy.units as u
 
-from desdithering import extract_spectrum as es
+from desidithering import extract_spectrum as es
 
 offset_rms = float(sys.argv[1])
 
 # some constants
-num_fibers = 2000
+num_fibers = 4000
 focal_plane_radius = 410
 num_theta = 100
 
