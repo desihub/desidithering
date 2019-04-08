@@ -243,6 +243,7 @@ class dithering:
     """
     def get_fiber_acceptance_fraction(self, source_type, source_fraction, source_half_light_radius,
                                       source_minor_major_axis_ratio, source_position_angle):
+        scale, blur, offset = self.desi.instrument.get_focal_plane_optics(self.focal_x, self.focal_y, self.wlen_grid)
         self.fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(self.focal_x, self.focal_y, self.wlen_grid,
                                                                                    self.desi.source, self.desi.atmosphere, self.desi.instrument,
                                                                                    source_type, source_fraction, source_half_light_radius,
@@ -278,13 +279,9 @@ class dithering:
         #org_airmass         = self.desi.atmosphere.airmass
         self.desi.atmosphere.seeing_fwhm_ref = self.seeing_ref + seeing_fwhm_ref_offset
         #self.desi.atmosphere.airmass         += airmass_offset
-        #print(self.desi.atmosphere.seeing_fwhm_ref)
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
-        #print(time.time()-start_time)
         start_time = time.time()
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
-        #print(time.time()-start_time)
-        #start_time = time.time()
         self.SNR = {}
         self.signal = {}
         for output in self.desi.camera_output:
