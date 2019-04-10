@@ -52,7 +52,7 @@ class dithering:
     def __init__(self, config_file="../config/desi-blur.yaml", verbose=False, output_file=None):
         self.config_file = config_file
         cfg = specsim.config.load_config(self.config_file)
-        self.desi        = sim.Simulator(self.config_file, num_fibers=1)
+        self.desi        = sim.Simulator(self.config_file, num_fibers=1, verbose=True)
         wavelength       = self.desi.simulated['wavelength']
         wlen_unit        = wavelength.unit
         self.num_wlen    = len(wavelength)
@@ -243,13 +243,22 @@ class dithering:
     """
     def get_fiber_acceptance_fraction(self, source_type, source_fraction, source_half_light_radius,
                                       source_minor_major_axis_ratio, source_position_angle):
-        scale, blur, offset = self.desi.instrument.get_focal_plane_optics(self.focal_x, self.focal_y, self.wlen_grid)
+        start_time = time.time()
+        """
+        THIS PART IS NOT NEEDED AND SLOWS DOWN THE SCRIPT CONSIDERABLY
+        WILL REMOVE IN THE NEXT ITERATION
+
+        scale, blur, offset = self.desi.instrument.get_focal_plane_optics(self.focal_x,
+                                                                          self.focal_y,
+                                                                          self.wlen_grid)
+        print("getting focal plane optics took {} s for wlen_grid size of {}".format(time.time()-start_time, len(self.wlen_grid)))
+        """
+        start_time = time.time()
         self.fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(self.focal_x, self.focal_y, self.wlen_grid,
                                                                                    self.desi.source, self.desi.atmosphere, self.desi.instrument,
                                                                                    source_type, source_fraction, source_half_light_radius,
                                                                                    source_minor_major_axis_ratio,
                                                                                    source_position_angle, fiber_placement=self.fiber_placement)
-
 
     """
     Function to run the simulation with all the parameters defined/given
@@ -274,16 +283,14 @@ class dithering:
                        source_minor_major_axis_ratio, source_position_angle, report=True, seeing_fwhm_ref_offset=0*u.arcsec,
                        airmass_offset=0):
         # store the variables in a local variable to revert back at the end
-        #start_time = time.time()
-        #org_seeing_fwhm_ref = self.desi.atmosphere.seeing_fwhm_ref
-        #org_airmass         = self.desi.atmosphere.airmass
         self.desi.atmosphere.seeing_fwhm_ref = self.seeing_ref + seeing_fwhm_ref_offset
-        #self.desi.atmosphere.airmass         += airmass_offset
+        start_time = time.time()
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
         start_time = time.time()
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
         self.SNR = {}
         self.signal = {}
+        start_time = time.time()
         for output in self.desi.camera_output:
             snr = (output['num_source_electrons'][:, 0])/np.sqrt(output['variance_electrons'][:, 0])
             signal = (output['num_source_electrons'][:, 0])
@@ -291,12 +298,6 @@ class dithering:
             self.signal[output.meta['name']] = [signal, output.meta['pixel_size']]
         if report:
             self.report(simple=False)
-        # variables are restored using the local storage variables
-        #self.desi.atmosphere.seeing_fwhm_ref = org_seeing_fwhm_ref
-        #self.desi.atmosphere.airmass         = org_airmass
-        #print(self.desi.atmosphere.seeing_fwhm_ref)
-        #del org_seeing_fwhm_ref
-        #del org_airmass
         
     def report(self, simple=True):
         if self.output_file is not None:
