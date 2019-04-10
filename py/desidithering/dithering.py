@@ -52,7 +52,7 @@ class dithering:
     def __init__(self, config_file="../config/desi-blur.yaml", verbose=False, output_file=None):
         self.config_file = config_file
         cfg = specsim.config.load_config(self.config_file)
-        self.desi        = sim.Simulator(self.config_file, num_fibers=1, verbose=True)
+        self.desi        = sim.Simulator(self.config_file, num_fibers=1, verbose=verbose)
         wavelength       = self.desi.simulated['wavelength']
         wlen_unit        = wavelength.unit
         self.num_wlen    = len(wavelength)
