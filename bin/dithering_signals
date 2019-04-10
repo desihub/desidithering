@@ -508,7 +508,6 @@ for i in range(num_pointings):
         ], header=hodor)
     hdulist.append(thdu)
     
-os.mkdir("{}/".format(prefix))
 try:
     print("making directory: {}/data".format(prefix))
     os.mkdir("{}/".format(prefix))
