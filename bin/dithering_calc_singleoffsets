@@ -2,149 +2,96 @@
 
 import math
 import scipy.optimize as opt
+import numpy as np
+import argparse
+
+import pickle
+import sys
+import astropy.units as u
+from astropy import wcs
+
 import matplotlib as mpl
-from matplotlib import cm
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from matplotlib.colors import LogNorm
 from matplotlib import rcParams
 from astropy.io import fits
 from astropy import table
-import numpy as np
-import argparse
 
 from scipy.interpolate import interp2d
 from scipy.interpolate import CloughTocher2DInterpolator
 from scipy.interpolate import SmoothBivariateSpline
-import pickle
-import sys
-import astropy.units as u
-
-from astropy import wcs
+from scipy.optimize import fsolve
+from scipy.optimize import minimize
+from scipy.optimize import root
 
 plt.rcParams['font.family'] = "sans-serif"       
 plt.rcParams['xtick.labelsize'] = 14
 plt.rcParams['ytick.labelsize'] = 14
 plt.rcParams['lines.linewidth'] = 2
 
-def twoD_Gaussian(xy_tuple, amplitude, xo, yo, sigma_x, sigma_y):
-    (x, y) = xy_tuple
-    xo = float(xo)
-    yo = float(yo)
-    amplitude = float(amplitude)
-    g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma_x**2) + (y-yo)**2/(2*sigma_y**2) ) )
-    return g.ravel()
+def calculate_integral(x_pos, y_pos, xo, yo, amp, sigma):
+    max_x = max(x_pos, xo)+100
+    min_x = min(x_pos, xo)-100
+    max_y = max(y_pos, yo)+100
+    min_y = min(y_pos, yo)-100
+    xs = np.linspace(min_x, max_x, grid_sampling)
+    ys = np.linspace(min_y, max_y, grid_sampling)
+    dx = xs[1]-xs[0]
+    dy = ys[1]-ys[0]
+    xv, yv = np.meshgrid(xs, ys)
+    integral = 0
+    for i in range(grid_sampling):
+        for j in range(grid_sampling):
+            integral += integrand(xv[i,j], yv[i,j], x_pos, y_pos, amp, xo, yo, sigma)*dx*dy
+    return integral
 
-def oneD_Gaussian(xy_tuple, amplitude, xo, yo, sigma):
-    (x, y) = xy_tuple
-    xo = float(xo)
-    yo = float(yo)
-    amplitude = float(amplitude)
-    g = amplitude * np.exp( - ( (x-xo)**2/(2*sigma**2) + (y-yo)**2/(2*sigma**2) ) )
-    return g.ravel()
-"""
-def fit_function(x, y, signal, max_dim=None):
-    # normalize xs, ys, signal
-    nominal_psf = 55.
-    
-    max_x = max(np.fabs(x))
-    max_y = max(np.fabs(y))
+def integrand(x, y, x_offset, y_offset, amp, xo, yo, sigma):
+    condition1 = (np.sqrt((x-x_offset)**2 + (y-y_offset)**2)) <=sigma
+    condition2 = (np.sqrt((x-xo)**2       + (y-yo)**2)) <=sigma
+    if condition1 and condition2:
+        return twoDGaussian(x, y, amp, xo, yo, sigma, sigma)
+    else:
+        return 0
 
-    if max_dim == None:
-        max_dim = 70.#max(max_x, max_y)
-    max_s = max(signal)
-    x = x/max_dim
-    y = y/max_dim
-    signal = signal/max_s
-    tmp_sigma = nominal_psf/max_dim
-    
-    coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
-    data = np.array(signal).ravel()
-    
-    start_index = np.argmax(data)
-    initial_guess = (max(signal), 
-                     x[start_index], y[start_index], 
-                     nominal_psf/max_x, nominal_psf/max_y, math.pi/95.)
-    
-    signal_bounds = [max(signal)/5., max(signal)*4.]
-    sigma_bounds  = [tmp_sigma-0.1 if tmp_sigma-0.1>0. else 0.01, 2.1]
-    popt, pcov = opt.curve_fit(twoD_ellipticGaussian,
-                               coordinates,
-                               data,
-                               p0=initial_guess,
-                               bounds=([signal_bounds[0], min(x), min(y),  sigma_bounds[0], sigma_bounds[0], -math.pi], 
-                                       [signal_bounds[1], max(x), max(y),  sigma_bounds[1], sigma_bounds[1], math.pi]) )
-    return popt[1]*max_dim, popt[2]*max_dim, popt[3]*max_dim, popt[4]*max_dim, popt[5]
-"""
-def twoD_ellipticGaussian(xy_tuple, amplitude, xo, yo, sigma_1, sigma_2, phi):
-    (x, y) = xy_tuple
-    amplitude = float(amplitude)
-    xo = float(xo)
-    yo = float(yo)
-    sigma_1 = float(sigma_1)
-    sigma_2 = float(sigma_2)
-    phi     = float(phi)
+def twoDGaussian(x, y, amp, xo, yo, sigma_1, sigma_2, phi=0.0):
     A = (np.cos(phi) / sigma_1)**2 + (np.sin(phi) / sigma_2)**2
     B = (np.sin(phi) / sigma_1)**2 + (np.cos(phi) / sigma_2)**2
     C = 2 * np.sin(phi) * np.cos(phi)*(1/sigma_1**2 - 1/sigma_2**2)
-    g = amplitude * np.exp( -0.5 * ( A*(x-xo)**2 + B*(y-yo)**2 + C*(x-xo)*(y-yo) ) )
-    return g.ravel()
+    return amp * np.exp( -0.5 * ( A * (x-xo)**2 +
+                                  B * (y-yo)**2 +
+                                  C*(x-xo)*(y-yo) ) )
 
-def fit_simulation(x, y, signal, max_dim=None):
-    # normalize xs, ys, signal
-    nominal_psf = 55.
-    max_x = max(np.fabs(x))
-    max_y = max(np.fabs(y))
-    if max_dim == None:
-        max_dim = 70.#max(max_x, max_y)
-    max_s = max(signal)
-    x = x/max_dim
-    y = y/max_dim
-    signal = signal/max_s
-    tmp_sigma = nominal_psf/max_dim
-    
-    coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
-    data = np.array(signal).ravel()
-    
-    start_index = np.argmax(data)
-    initial_guess = (max(signal), 
-                     x[start_index], y[start_index], 
-                     nominal_psf/max_x, nominal_psf/max_y, math.pi/95.)
-    
-    signal_bounds = [max(signal)/5., max(signal)*4.]
-    sigma_bounds  = [tmp_sigma-0.1 if tmp_sigma-0.1>0. else 0.01, 2.1]
-    popt, pcov = opt.curve_fit(twoD_ellipticGaussian,
-                               coordinates,
-                               data,
-                               p0=initial_guess,
-                               bounds=([signal_bounds[0], min(x), min(y),  sigma_bounds[0], sigma_bounds[0], -math.pi], 
-                                       [signal_bounds[1], max(x), max(y),  sigma_bounds[1], sigma_bounds[1], math.pi]) )
-    return popt[1]*max_dim, popt[2]*max_dim, popt[3]*max_dim, popt[4]*max_dim, popt[5]
-
-def fit_simulation2(x, y, signal, max_dim=None):
-    # normalize xs, ys, signal
-    nominal_psf = 55.
-    max_s = max(signal)
-        
-    x = x/max_dim
-    y = y/max_dim
-    nominal_psf = nominal_psf/max_dim
-    signal = signal/max_s
-
-    coordinates = np.vstack((np.array(x).ravel(), np.array(y).ravel()))
-    data = np.array(signal).ravel()
-    
-    start_index = np.argmax(data)
-
-    initial_guess = (max(signal), x[start_index], y[start_index], nominal_psf)
-    signal_bounds = [max(signal)/1.5, max(signal)*3.]
-    sigma_bounds  = [20./max_dim, 100./max_dim]
-    popt, pcov = opt.curve_fit(oneD_Gaussian,
-                               coordinates,
-                               data,
-                               method='lm',
-                               p0=initial_guess)
-    
-    return popt[1]*max_dim, popt[2]*max_dim, popt[3]*max_dim, None, None
+sigma_limits = [-5., 5.]
+def proper_fit_vecfunc(inputs):
+    num_dithering_points = len(curr_xs)
+    amplitude = inputs[0]
+    xo        = inputs[1]
+    yo        = inputs[2]
+    sigma     = inputs[3]
+    sigmas    = inputs[4:]
+    F         = np.empty((num_dithering_points+4))
+    for iDither in range(num_dithering_points):
+        condition = 0
+        curr_sigma = sigma + sigmas[iDither]
+        if (curr_sigma < 30.) or (curr_sigma > 70.):
+            condition = 1
+        if (sigmas[iDither] < sigma_limits[0]) or (sigmas[iDither] > sigma_limits[1]):
+            condition = 2
+        if amplitude < 1e-3:
+            condition = 3
+        if condition == 0:
+            F[iDither] = calculate_integral(curr_xs[iDither], curr_ys[iDither], xo, yo, amplitude, curr_sigma)
+            #g = np.fabs(curr_signals[iDither]**2 - \
+            #            (amplitude * np.exp( - ( (curr_xs[iDither]-xo)**2/(2*curr_sigma**2) + (curr_ys[iDither]-yo)**2/(2*curr_sigma**2) ) ))**2)
+            #F[iDither] = g.ravel()
+            #print(curr_signals[iDither],
+            #      (amplitude * np.exp( - ( (curr_xs[iDither]-xo)**2/(2*curr_sigma**2) + (curr_ys[iDither]-yo)**2/(2*curr_sigma**2) ) ))**2)
+        else:
+            F[iDither] = 1e12
+    for iDummy in range(4):
+        F[num_dithering_points+iDummy] = 1e-5
+    return F
 
 def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1):
     filenames = []
@@ -190,7 +137,8 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
     calc_offsets_y = []
 
     #for iFiber in range(len(dithering_pos_xs[0])):
-    for iFiber, _ in enumerate(focal_xs[0]):
+    for iFiber in range(start_idx, end_idx):#(focal_xs[0]):
+        global curr_xs, curr_ys, curr_signals
         curr_focal_x = focal_xs[0][iFiber]
         curr_focal_y = focal_ys[0][iFiber]
         curr_xs = dithering_pos_xs[0][iFiber]
@@ -212,16 +160,27 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
                 print("failed the sanity check")
         curr_xs = np.asarray(curr_xs).flatten()
         curr_ys = np.asarray(curr_ys).flatten()
-        curr_signals = np.asarray(curr_signals).flatten()
-        curr_x_offset, curr_y_offset, curr_sigma_1, curr_sigma_2, curr_angle = fit_simulation2(curr_xs,
-                                                                                               curr_ys,
-                                                                                               curr_signals,
-                                                                                               1.5*max([r for r in [search_radius1,
-                                                                                                                    search_radius2,
-                                                                                                                    search_radius3]
-                                                                                                        if r is not None]))
-        calc_offsets_x.append(curr_x_offset)
-        calc_offsets_y.append(curr_y_offset)
+        curr_signals  = np.asarray(curr_signals).flatten()
+        initial_guess = [np.random.uniform(1e-2, 0.2), np.random.uniform(-20., 20.), np.random.uniform(-20., 20.), np.random.uniform(30., 70.)]
+        bounds        = [(1e-1, 1.0), (-40., 40.), (-40., 40.), (30., 70.)]
+        for iDither in range(len(curr_xs)):
+            initial_guess.append(np.random.uniform(-5., 5.))
+        calc_values = root(proper_fit_vecfunc, x0=initial_guess,
+                           method='lm',
+                           options={'ftol': 1e-15, 'xtol':1e-15,
+                                    'factor': 100, 'eps': 5.,
+                                    'gtol': 1e-15, 'maxiter': 10000})
+        print("Fiber ID      i ", Fiber)
+        print("Solver message: ", calc_values.message)
+        print("Convergence   : ", calc_values.success)
+        print("Num of F ev   : ", calc_values.nfev)
+        print("Fit results   : ", proper_fit_vecfunc(calc_values.x))
+        
+        calc_x_offset = calc_values.x[1]
+        calc_y_offset = calc_values.x[2]
+        calc_offsets_x.append(calc_x_offset)
+        calc_offsets_y.append(calc_y_offset)
+        del curr_xs, curr_ys, curr_signals
         
     calc_offsets_x = np.array(calc_offsets_x)
     calc_offsets_y = np.array(calc_offsets_y)
@@ -236,7 +195,14 @@ def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=
                                                                   search_radius2,
                                                                   search_radius3,
                                                                   template=template)
-    
+
+    results_summary = {'focal_x': focal_x,
+                       'focal_y': focal_y,
+                       'calc_offset_x': calc_offset_x,
+                       'calc_offset_y': calc_offset_y}
+    pickle.dump(results_summary, open("results_{}_{}_summary_{}_{}.pkl".format(search_radius1, search_radius2, start_idx, end_idx), "wb"))
+
+    """
     # put the numbers into interpolators
     calc_offset_r = np.sqrt(calc_offset_x**2 + calc_offset_y**2)
     selected      = calc_offset_r <= max_value
@@ -245,7 +211,6 @@ def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=
     interpolator_y = CloughTocher2DInterpolator(focal_xy, calc_offset_y[selected])
 
     # calculate the interpolated values at the grid points
-    print(xs.shape, ys.shape)
     cx = interpolator_x(xys)
     cy = interpolator_y(xys)
     cr = np.sqrt(cx**2+cy**2)
@@ -363,21 +328,28 @@ def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=
         pickle.dump(results, open("results_{}_{}.pkl".format(search_radius1, search_radius2), "wb"))
     else:
         pickle.dump(results, open("results_{}_{}_{}.pkl".format(search_radius1, search_radius2, search_radius3), "wb"))
-
+    """
+    
 parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
 parser.add_argument("--stepsize", required=True, nargs="+", type=float)
 parser.add_argument("--template",  required=True, type=int)
 parser.add_argument("--prefix",    required=True, type=str)
+parser.add_argument("--sampling", type=int, default=6)
+parser.add_argument("--start_idx", type=int, required=True)
+parser.add_argument("--end_idx", type=int, required=True)
 parsed_args = parser.parse_args()
 
-data_path = parsed_args.prefix
-stepsizes = np.asarray(parsed_args.stepsize)
-template  = parsed_args.template
-prefix    = parsed_args.prefix
+global grid_sampling, start_idx, end_idx
+data_path     = parsed_args.prefix
+stepsizes     = np.asarray(parsed_args.stepsize)
+template      = parsed_args.template
+prefix        = parsed_args.prefix
+grid_sampling = parsed_args.sampling
+start_idx     = parsed_args.start_idx
+end_idx       = parsed_args.end_idx
 
 # load the predefined offset field interpolator
 pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
-#pickled_data = pickle.load(open("../data/offset_field{}_sbvs.pkl".format(template), "rb"))
 xs = np.array(pickled_data["x"])
 ys = np.array(pickled_data["y"])
 xys = list(zip(xs, ys))
