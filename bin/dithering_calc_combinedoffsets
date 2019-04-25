@@ -30,6 +30,37 @@ plt.rcParams['xtick.labelsize'] = 14
 plt.rcParams['ytick.labelsize'] = 14
 plt.rcParams['lines.linewidth'] = 2
 
+def fit_vecfunc(inputs):
+    num_fibers           = len(selected_xs)
+    num_dithering_points = len(selected_xs[0])
+    F                    = np.empty((num_equations))
+    sigma_vars           = inputs[num_fibers*4:]
+    F_idx                = 0
+    for i in range(num_fibers):
+        input_idx = i * 4
+        amplitude = inputs[input_idx]
+        xo        = inputs[input_idx+1]
+        yo        = inputs[input_idx+2]
+        sigma     = inputs[input_idx+3]
+        curr_xs   = selected_xs[i]
+        curr_ys   = selected_ys[i]
+        curr_signals = selected_signals[i]
+        for j in range(num_dithering_points):
+            curr_sigma = sigma + sigma_vars[j]
+            # apply the penalties depending on the conditions
+            if (curr_sigma < 30.) or (curr_sigma > 70.):
+                val = 1e12
+            elif amplitude < 1e-3:
+                val = 1e12
+            elif (xo<-30. or xo>30.) or (yo<-30. or yo>30.):
+                val = 1e12
+            else:
+                val = np.sqrt(np.fabs(curr_signals[i]**2 - (calculate_integral(curr_xs[i], curr_ys[i], xo, yo, amplitude, curr_sigma))**2))
+            
+            F[F_idx] = val
+            F_idx+=1
+    return F
+                                        
 def calculate_integral(x_pos, y_pos, xo, yo, amp, sigma):
     max_x = max(x_pos, xo)+100
     min_x = min(x_pos, xo)-100
@@ -61,35 +92,6 @@ def twoDGaussian(x, y, amp, xo, yo, sigma_1, sigma_2, phi=0.0):
     return amp * np.exp( -0.5 * ( A * (x-xo)**2 +
                                   B * (y-yo)**2 +
                                   C*(x-xo)*(y-yo) ) )
-
-sigma_limits = [-5., 5.]
-def proper_fit_vecfunc(inputs):
-    if not np.asarray(inputs).all():
-        print("Signals       : ", curr_signals)
-    num_dithering_points = len(curr_xs)
-    amplitude = inputs[0]
-    xo        = inputs[1]
-    yo        = inputs[2]
-    sigma     = inputs[3]
-    sigmas    = inputs[4:]
-    F         = np.empty((num_dithering_points+4))
-    for iDither in range(num_dithering_points):
-        condition = 0
-        curr_sigma = sigma + sigmas[iDither]
-        if (curr_sigma < 30.) or (curr_sigma > 70.):
-            condition = 1
-        if (sigmas[iDither] < sigma_limits[0]) or (sigmas[iDither] > sigma_limits[1]):
-            condition = 2
-        if amplitude < 1e-3:
-            condition = 3
-        if condition == 0:
-            F[iDither] = np.sqrt(np.fabs(curr_signals[iDither]**2 -
-                                         (calculate_integral(curr_xs[iDither], curr_ys[iDither], xo, yo, amplitude, curr_sigma))**2))
-        else:
-            F[iDither] = 1e12
-    for iDummy in range(4):
-        F[num_dithering_points+iDummy] = 1e-5
-    return F
 
 def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1):
     filenames = []
@@ -131,90 +133,146 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         focal_ys.append(hdus[1].data['focal_y'])
         mags.append(hdus[1].data['mag'])
         
-    calc_offsets_x   = []
-    calc_offsets_y   = []
-    calc_convergence = []
-    calc_cost        = []
-    #for iFiber in range(len(dithering_pos_xs[0])):
-    for iFiber in range(start_idx, end_idx):#(focal_xs[0]):
-        global curr_xs, curr_ys, curr_signals
-        curr_focal_x = focal_xs[0][iFiber]
-        curr_focal_y = focal_ys[0][iFiber]
-        curr_xs = dithering_pos_xs[0][iFiber]
-        curr_ys = dithering_pos_ys[0][iFiber]
-        curr_signals = calc_signals[0][iFiber]
+    calc_offsets_x = []
+    calc_offsets_y = []
+
+    global collected_xs, collected_ys, collected_signals, collected_focal_xs, collected_focal_ys
+    per_dither        = 9
+    collected_xs      = np.zeros((end_idx-start_idx+1, len(filenames)*per_dither))
+    collected_ys      = np.zeros((end_idx-start_idx+1, len(filenames)*per_dither))
+    collected_signals = np.zeros((end_idx-start_idx+1, len(filenames)*per_dither))
+    collected_focal_x = np.zeros((end_idx-start_idx+1))
+    collected_focal_y = np.zeros((end_idx-start_idx+1))
+    for iFiber in range(start_idx, end_idx):
+        collected_focal_x[iFiber]          = focal_xs[0][iFiber]
+        collected_focal_y[iFiber]          = focal_ys[0][iFiber]
+        collected_xs[iFiber][0:per_dither] = dithering_pos_xs[0][iFiber]
+        collected_ys[iFiber][0:per_dither] = dithering_pos_ys[0][iFiber]
+        collected_signals[iFiber][0:per_dither] =  calc_signals[0][iFiber]
         for iSet, _ in enumerate(dithering_pos_xs):
             if iSet == 0:
                 continue
-            focal_x_indices = (focal_xs[iSet] == curr_focal_x)
-            focal_y_indices = (focal_ys[iSet] == curr_focal_y)
+            focal_x_indices = (focal_xs[iSet] == collected_focal_x[iFiber])
+            focal_y_indices = (focal_ys[iSet] == collected_focal_y[iFiber])
             index        = np.logical_and(focal_x_indices, focal_y_indices)
             ifiber_match = np.where(index)[0]
             # just a sanity check
-            if ( (curr_focal_x == focal_xs[iSet][ifiber_match]) and (curr_focal_y == focal_ys[iSet][ifiber_match]) ):
-                curr_xs = np.concatenate((curr_xs, dithering_pos_xs[iSet][ifiber_match]), axis=None)
-                curr_ys = np.concatenate((curr_ys, dithering_pos_ys[iSet][ifiber_match]), axis=None)
-                curr_signals = np.concatenate((curr_signals, calc_signals[iSet][ifiber_match]), axis=None)
+            if ( (collected_focal_x[iFiber] == focal_xs[iSet][ifiber_match]) and (collected_focal_y[iFiber] == focal_ys[iSet][ifiber_match]) ):
+                collected_xs[iFiber][iSet*9:(iSet+1)*9] = dithering_pos_xs[iSet][ifiber_match]
+                collected_ys[iFiber][iSet*9:(iSet+1)*9] = dithering_pos_ys[iSet][ifiber_match]
+                collected_signals[iFiber][iSet*9:(iSet+1)*9] = calc_signals[iSet][ifiber_match]
             else:
                 print("failed the sanity check")
-        curr_xs = np.asarray(curr_xs).flatten()
-        curr_ys = np.asarray(curr_ys).flatten()
-        curr_signals  = np.asarray(curr_signals).flatten()
-        retry = 0
-        total_cost = 5000.
-        while (retry < 5) and (total_cost>2000.):
-            print("Initial guess results in high cost. Retrying...")
-            initial_guess = [np.random.uniform(1e-2, 0.2), np.random.uniform(-20., 20.), np.random.uniform(-20., 20.), np.random.uniform(30., 70.)]
-            for iDither in range(len(curr_xs)):
-                initial_guess.append(np.random.uniform(-5., 5.))
-            total_cost = np.sum(proper_fit_vecfunc(initial_guess))
-            retry     +=1
-        print("Fiber ID      : ", iFiber)
-        proper_fit_vecfunc(np.zeros(len(initial_guess)))
-        print("Initial cost  : ", np.sum(proper_fit_vecfunc(initial_guess)))
-        calc_values = root(proper_fit_vecfunc, x0=initial_guess,
-                           method='lm',
-                           options={'ftol': 1e-15, 'xtol':1e-15,
-                                    'factor': 50, 'eps': 10.,
-                                    'gtol': 1e-15, 'maxiter': 5000})
-        print("Solver message: ", calc_values.message)
-        print("Convergence   : ", calc_values.success)
-        print("Num of F ev   : ", calc_values.nfev)
-        print("Solution      : A={} x={} y={}".format(calc_values.x[0], calc_values.x[1], calc_values.x[2]))
-        print("Fit results   : ", proper_fit_vecfunc(calc_values.x))
-        print("Total cost    : ", np.sum(proper_fit_vecfunc(calc_values.x)))
+    # once all the coordinates and the signals are collected
+    # we randomly group them in 10 (for now, it is not random)
+    global num_unknowns, num_equations
+    global selected_xs, selected_ys, selected_signals
+    #num_in_group = 4
+    # here we select the fibers
+    selected_xs = collected_xs[:num_in_group]
+    selected_ys = collected_ys[:num_in_group]
+    selected_signals = collected_signals[:num_in_group]
+    num_unknowns = num_in_group * 4 + len(selected_xs[0])
+    num_equations = num_in_group * len(selected_xs[0])
+    
+    print("Number of unknowns: ", num_unknowns)
+    print("Number of equations: ", num_equations)
+    
+    initial_guess = []
+    for i in range(num_in_group):
+        # initial guesses for amplitude, xo, yo, sigma per fiber
+        initial_guess.extend((np.random.uniform(1e-2, 0.2),
+                              np.random.uniform(-20., 20.),
+                              np.random.uniform(-20., 20.),
+                              np.random.uniform(30., 70.)))
+    # change in the sigma per fiber is added here.
+    # it is assumed all fibers exhibit the same change
+    for i in range(len(selected_xs[0])):
+        initial_guess.append(np.random.uniform(-5., 5.))
+
+    # I will fill the rest of the initial guess with zero values
+    # required for scipy.root to work
+    curr_initial_guess_len = len(initial_guess)
+    for i in range(num_equations-num_unknowns):
+        initial_guess.append(1e-5)
+
+    print("Initial cost   : ", np.sum(fit_vecfunc(initial_guess)))
+
+    calc_values = root(fit_vecfunc, x0=initial_guess, method='lm',
+                       options={'ftol': 1e-12, 'xtol':1e-12,
+                                'eps': 7.5, 'gtol': 1e-12, 'maxiter': 5000})
+
+    #print(fit_vecfunc(calc_values.x))
+    #print(calc_values.x)
+    print("Initial        : ")
+    for i in range(num_in_group):
+        print("A={}, xo={}, yo={}".format(initial_guess[i*4], initial_guess[i*4+1], initial_guess[i*4+2]))
+    print("Solver message : ", calc_values.message)
+    print("Convergence    : ", calc_values.success)
+    print("Solution       : ")
+    for i in range(num_in_group):
+        print("A={}, xo={}, yo={}".format(calc_values.x[i*4], calc_values.x[i*4+1], calc_values.x[i*4+2]))
+    print("Total cost     : ", np.sum(fit_vecfunc(calc_values.x)))
+    
+    for i in something:
+        # this is where script will break
+        print(r[0])
+                
+        initial_guess = [0.1, np.random.uniform(-20., 20.), np.random.uniform(-20., 20.), np.random.uniform(30., 70.)]
+        bounds        = [(1e-1, 1.0), (-40., 40.), (-40., 40.), (30., 70.)]
+        for iDither in range(len(curr_xs)):
+            initial_guess.append(np.random.uniform(-5., 5.))
+        #calc_values = minimize(proper_fit_func, x0=calc_values.x, method="TNC", bounds=tuple(bounds), tol=1e-8,
+        #                       options={'maxiter': 5000, 'ftol':1e-8})
+        calc_values = root(proper_fit_vecfunc, x0=initial_guess, method='lm',
+                           options={'ftol': 1e-8, 'xtol':1e-8, 'maxiter': 5000})
+        #calc_values = root(proper_fit_vecfunc, x0=calc_values.x, method='lm',
+        #                   options={'ftol': 1e-10, 'xtol':1e-10, 'maxiter': 5000})
+        print(initial_guess)
+        print(iFiber, calc_values.success, calc_values.x[:])
+        initial_guess[0] = initial_guess[0]/2.
+        calc_values = root(proper_fit_vecfunc, x0=initial_guess, method='lm',
+                           options={'ftol': 1e-8, 'xtol':1e-8, 'maxiter': 5000})
+
+        calc_values = root(proper_fit_vecfunc, x0=calc_values.x, method='broyden1')#,
+                           #options={'ftol': 1e-8, 'xtol':1e-8})#, 'maxiter': 5000})
+        #calc_values = root(proper_fit_vecfunc, x0=calc_values.x, method='linearmixing',
+        #                   options={'ftol': 1e-10, 'xtol':1e-10, 'maxiter': 5000})
+        print(iFiber, calc_values.success, calc_values.x[:])
+
         
+        calc_values = root(proper_fit_vecfunc, x0=initial_guess, method='linearmixing',
+                           options={'ftol': 1e-8, 'xtol':1e-8, 'maxiter': 5000})
+        #calc_values = root(proper_fit_vecfunc, x0=calc_values.x, method='linearmixing',
+        #                   options={'ftol': 1e-10, 'xtol':1e-10, 'maxiter': 5000})
+        print(iFiber, calc_values.success, calc_values.x[:])
+
         calc_x_offset = calc_values.x[1]
         calc_y_offset = calc_values.x[2]
         calc_offsets_x.append(calc_x_offset)
         calc_offsets_y.append(calc_y_offset)
-        calc_convergence.append(calc_values.success)
-        calc_cost.append(np.sum(proper_fit_vecfunc(calc_values.x)))
         del curr_xs, curr_ys, curr_signals
         
     calc_offsets_x = np.array(calc_offsets_x)
     calc_offsets_y = np.array(calc_offsets_y)
-    return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_convergence, calc_cost
+    return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y
 
 def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=None):
     max_value = 30.
     
     # calculate the values for a combination of search radii
-    focal_x, focal_y, calc_offset_x, calc_offset_y, calc_convergence, calc_cost = run_analysis("triangle", 
-                                                                                               search_radius1,
-                                                                                               search_radius2,
-                                                                                               search_radius3,
-                                                                                               template=template)
+    focal_x, focal_y, calc_offset_x, calc_offset_y = run_analysis("triangle", 
+                                                                  search_radius1,
+                                                                  search_radius2,
+                                                                  search_radius3,
+                                                                  template=template)
 
     results_summary = {'focal_x': focal_x,
                        'focal_y': focal_y,
                        'calc_offset_x': calc_offset_x,
-                       'calc_offset_y': calc_offset_y,
-                       'calc_convergence': calc_convergence,
-                       'calc_cost': calc_cost}
+                       'calc_offset_y': calc_offset_y}
     pickle.dump(results_summary, open("results_{}_{}_summary_{}_{}.pkl".format(search_radius1, search_radius2, start_idx, end_idx), "wb"))
-
-    """
+    
     # put the numbers into interpolators
     calc_offset_r = np.sqrt(calc_offset_x**2 + calc_offset_y**2)
     selected      = calc_offset_r <= max_value
@@ -340,8 +398,7 @@ def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=
         pickle.dump(results, open("results_{}_{}.pkl".format(search_radius1, search_radius2), "wb"))
     else:
         pickle.dump(results, open("results_{}_{}_{}.pkl".format(search_radius1, search_radius2, search_radius3), "wb"))
-    """
-    
+
 parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
 parser.add_argument("--stepsize", required=True, nargs="+", type=float)
 parser.add_argument("--template",  required=True, type=int)
@@ -349,9 +406,10 @@ parser.add_argument("--prefix",    required=True, type=str)
 parser.add_argument("--sampling", type=int, default=6)
 parser.add_argument("--start_idx", type=int, required=True)
 parser.add_argument("--end_idx", type=int, required=True)
+parser.add_argument("--numgroup", type=int, default=2)
 parsed_args = parser.parse_args()
 
-global grid_sampling, start_idx, end_idx
+global grid_sampling, start_idx, end_idx, num_in_group
 data_path     = parsed_args.prefix
 stepsizes     = np.asarray(parsed_args.stepsize)
 template      = parsed_args.template
@@ -359,6 +417,7 @@ prefix        = parsed_args.prefix
 grid_sampling = parsed_args.sampling
 start_idx     = parsed_args.start_idx
 end_idx       = parsed_args.end_idx
+num_in_group  = parsed_args.numgroup
 
 # load the predefined offset field interpolator
 pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
