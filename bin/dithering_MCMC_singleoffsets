@@ -1,0 +1,335 @@
+#!/bin/python
+
+import math
+import scipy.optimize as opt
+import numpy as np
+import argparse
+
+import pickle
+import sys
+import astropy.units as u
+from astropy import wcs
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import LogNorm
+from matplotlib import rcParams
+from astropy.io import fits
+from astropy import table
+
+from multiprocessing import Pool
+import emcee
+import corner
+import time
+import progressbar
+
+plt.rcParams['font.family'] = "sans-serif"       
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+plt.rcParams['lines.linewidth'] = 2
+
+debug = True
+
+x = None
+y = None
+yerr = None
+
+def lnprior(theta):
+    # define the priors in the hyperspace
+    condition1 = np.less_equal(theta[:num_dithers], 70)
+    condition2 = np.greater(theta[:num_dithers], 40)
+    sigma_condition = np.logical_and(condition1, condition2)
+    
+    condition1 = np.less_equal(theta[num_dithers::3], 30)
+    condition2 = np.greater(theta[num_dithers::3], -30)
+    x_offset_condition = np.logical_and(condition1, condition2)
+    
+    condition1 = np.less_equal(theta[num_dithers+1::3], 30)
+    condition2 = np.greater(theta[num_dithers+1::3], -30)
+    y_offset_condition = np.logical_and(condition1, condition2)
+    
+    condition1 = np.less_equal(theta[num_dithers+2::3], 5e-2)
+    condition2 = np.greater(theta[num_dithers+2::3], 1e-3)
+    amplitude_condition = np.logical_and(condition1, condition2)
+    
+    overall_condition = sigma_condition.all() and x_offset_condition.all() and \
+        y_offset_condition.all() and amplitude_condition.all()
+    
+    if overall_condition:
+        return 0.0
+    else:
+        return -np.inf
+
+def lnlike(theta, x, y, yerr):
+    # since sigma[j] is linked between all fibers,
+    # the minimizer needs to work on all samples at once.
+    #
+    # theta = [sigma[j], x_offset[i], y_offset[i], A[i]] 
+    #
+    # x    : NOT USED ###dither_pos_x[i,j], dither_pos_y[i,j]
+    # y    : NOT USED ###signal[i,j]
+    # i-> fiber number (ndim: 5000)
+    # j-> dither number (ndim: 9)
+    chi2 = 0
+    for iDither in range(num_dithers):
+        model_val = calculate_integral(curr_xs[iDither], curr_ys[iDither],
+                                       theta[num_dithers], theta[num_dithers+1], theta[num_dithers+2], theta[iDither])
+        y = curr_signals[iDither]
+        yerr = 1.# for now it is set to 1 ##(snrs[iFiber][iDither] / signals[iFiber][iDither])**-1
+        yerr = yerr if yerr >0. else 1e-10
+        chi2 += -0.5*( ( (y-model_val) / yerr )**2. )
+    return chi2
+
+def lnprob(theta, x, y, yerr):
+    lp = lnprior(theta)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + lnlike(theta, x, y, yerr)
+        
+def create_sampler():
+    global pool
+    pool = Pool()
+    #if not pool.is_master():
+    #    pool.wait()
+    #    sys.exit(0)
+    global ndim, nwalkers
+    ndim     = len(curr_xs) + 3
+    nwalkers = ndim*20
+    sampler  = emcee.EnsembleSampler(nwalkers, ndim, lnprob, 
+                                     args=(x, y, yerr), pool=pool)
+    return sampler
+
+def plot_results(samples, iFiber):
+    #start_time = time.time()
+    #print(samples)
+    #samples_ = samples.T
+    #plt.hist(samples[0],bins=40)
+    #plt.show()
+    try:
+        figure = corner.corner(samples, quantiles=(0.16, 0.84), levels=(0.68,))#levels=(1-np.exp(-0.5),))
+    except ValueError:
+        figure = corner.corner(samples)
+    means  = np.mean(samples, axis=0)
+    ndim   = len(samples[0])
+    axes   = np.array(figure.axes).reshape((ndim, ndim))
+    for i in range(ndim):
+        ax = axes[i, i]
+        ax.axvline(means[i], color="r")
+    for yi in range(ndim):
+        for xi in range(yi):
+            ax = axes[yi, xi]
+            ax.axvline(means[xi], color="r")
+            ax.axhline(means[yi], color="r")
+            ax.plot(means[xi], means[yi], "sr")
+    plt.savefig("result_{}.pdf".format(iFiber))
+
+def calculate_integral(x_pos, y_pos, xo, yo, amp, sigma):
+    max_x = max(x_pos, xo)+100
+    min_x = min(x_pos, xo)-100
+    max_y = max(y_pos, yo)+100
+    min_y = min(y_pos, yo)-100
+    xs = np.linspace(min_x, max_x, grid_sampling)
+    ys = np.linspace(min_y, max_y, grid_sampling)
+    dx = xs[1]-xs[0]
+    dy = ys[1]-ys[0]
+    xv, yv = np.meshgrid(xs, ys)
+    integral = 0
+    for i in range(grid_sampling):
+        for j in range(grid_sampling):
+            integral += integrand(xv[i,j], yv[i,j], x_pos, y_pos, amp, xo, yo, sigma)*dx*dy
+    return integral
+
+def integrand(x, y, x_offset, y_offset, amp, xo, yo, sigma):
+    condition1 = (np.sqrt((x-x_offset)**2 + (y-y_offset)**2)) <=sigma
+    condition2 = (np.sqrt((x-xo)**2       + (y-yo)**2)) <=sigma
+    if condition1 and condition2:
+        return twoDGaussian(x, y, amp, xo, yo, sigma, sigma)
+    else:
+        return 0
+
+def twoDGaussian(x, y, amp, xo, yo, sigma_1, sigma_2, phi=0.0):
+    A = (np.cos(phi) / sigma_1)**2 + (np.sin(phi) / sigma_2)**2
+    B = (np.sin(phi) / sigma_1)**2 + (np.cos(phi) / sigma_2)**2
+    C = 2 * np.sin(phi) * np.cos(phi)*(1/sigma_1**2 - 1/sigma_2**2)
+    return amp * np.exp( -0.5 * ( A * (x-xo)**2 +
+                                  B * (y-yo)**2 +
+                                  C*(x-xo)*(y-yo) ) )
+
+def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1, doplot=False):
+    filenames = []
+    # two files to be combine by default
+    # in case a third search radius is defined, add it to the list as well
+    filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                                 search_radius1,
+                                                                                                                                 pattern,
+                                                                                                                                 template,
+                                                                                                                                 template))
+    filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                                 search_radius2,
+                                                                                                                                 pattern,
+                                                                                                                                 template,
+                                                                                                                                 template))
+    try:
+        filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                                     search_radius3,
+                                                                                                                                     pattern,
+                                                                                                                                     template,
+                                                                                                                                     template))
+    except:
+        pass
+
+    dithering_pos_xs = []
+    dithering_pos_ys = []
+    calc_signals = []
+    focal_xs     = []
+    focal_ys     = []
+    mags         = []
+    
+    # tables corresponding to the files
+    for filename in filenames:
+        hdus = fits.open(filename)
+        dithering_pos_xs.append(hdus[1].data['dither_pos_x'])
+        dithering_pos_ys.append(hdus[1].data['dither_pos_y'])
+        calc_signals.append(hdus[1].data['calc_signals'])
+        focal_xs.append(hdus[1].data['focal_x'])
+        focal_ys.append(hdus[1].data['focal_y'])
+        mags.append(hdus[1].data['mag'])
+        
+    results = {}
+    #for iFiber in range(len(dithering_pos_xs[0])):
+    for iFiber in range(start_idx, end_idx):#(focal_xs[0]):
+        global curr_xs, curr_ys, curr_signals, num_dithers
+        curr_focal_x = focal_xs[0][iFiber]
+        curr_focal_y = focal_ys[0][iFiber]
+        curr_xs = dithering_pos_xs[0][iFiber]
+        curr_ys = dithering_pos_ys[0][iFiber]
+        curr_signals = calc_signals[0][iFiber]
+        for iSet, _ in enumerate(dithering_pos_xs):
+            if iSet == 0:
+                continue
+            focal_x_indices = (focal_xs[iSet] == curr_focal_x)
+            focal_y_indices = (focal_ys[iSet] == curr_focal_y)
+            index        = np.logical_and(focal_x_indices, focal_y_indices)
+            ifiber_match = np.where(index)[0]
+            # just a sanity check
+            if ( (curr_focal_x == focal_xs[iSet][ifiber_match]) and (curr_focal_y == focal_ys[iSet][ifiber_match]) ):
+                curr_xs = np.concatenate((curr_xs, dithering_pos_xs[iSet][ifiber_match]), axis=None)
+                curr_ys = np.concatenate((curr_ys, dithering_pos_ys[iSet][ifiber_match]), axis=None)
+                curr_signals = np.concatenate((curr_signals, calc_signals[iSet][ifiber_match]), axis=None)
+            else:
+                print("failed the sanity check")
+        curr_xs = np.asarray(curr_xs).flatten()
+        curr_ys = np.asarray(curr_ys).flatten()
+        curr_signals  = np.asarray(curr_signals).flatten()
+        num_dithers = len(curr_xs)
+        
+        start_time  = time.time()
+        #sampler     = create_sampler()
+        pool = Pool()
+        #if not pool.is_master():
+        #    pool.wait()
+        #    sys.exit(0)
+        ndim     = len(curr_xs) + 3
+        nwalkers = ndim*20
+        sampler  = emcee.EnsembleSampler(nwalkers, ndim, lnprob, 
+                                         args=(x, y, yerr), pool=pool)
+        print("sampler created in {} seconds".format(time.time()-start_time))
+
+        sigma_min = np.full(shape=num_dithers, fill_value=40)
+        sigma_max = np.full(shape=num_dithers, fill_value=70)
+        others_min = np.full(shape=3, fill_value=[-30., -30., 1e-3]).reshape(1, -1)[0]
+        others_max = np.full(shape=3, fill_value=[ 30.,  30., 5e-2]).reshape(1, -1)[0]
+        samples_min = np.append(sigma_min, others_min)
+        samples_max = np.append(sigma_max, others_max)
+        samples_size= samples_max - samples_min
+        samples     = [samples_min + samples_size * np.random.rand(ndim) for i in range(nwalkers)]
+        
+        # start the progress bar
+        bar = progressbar.ProgressBar(max_value = max_iterations,
+                                      widgets=[ ' [', progressbar.Timer(), '] ',
+                                                progressbar.Bar(),
+                                                ' (', progressbar.ETA(), ') ',])
+        bar.update(0)
+        
+        start_time  = time.time()
+        for iteration, result in enumerate(sampler.sample(samples, iterations=max_iterations)):
+            bar.update(iteration)
+        #sampler.run_mcmc(samples, 2000)
+        sys.stdout.write("\n")
+        print("MCMC ran in {} seconds".format(time.time()-start_time))
+        samples = sampler.flatchain
+        print("printing results")
+        if doplot:
+            plot_results(samples, iFiber)
+        result = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                      zip(*np.percentile(samples, [16, 50, 84],
+                                         axis=0)))
+        print(np.mean(samples)[-3:-2])
+        results[iFiber] = list(result)
+        print(results[iFiber][-3], results[iFiber][-2])
+        del curr_xs, curr_ys, curr_signals
+        del samples, sampler, result
+        pool.terminate()
+        del pool
+        
+    #calc_offsets_x = np.array(calc_offsets_x)
+    #calc_offsets_y = np.array(calc_offsets_y)
+    return results#focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_convergence, calc_cost
+
+def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=None, doplot=False):
+    max_value = 30.
+    
+    # calculate the values for a combination of search radii
+    results = run_analysis("triangle", 
+                           search_radius1,
+                           search_radius2,
+                           search_radius3,
+                           template=template,
+                           doplot=doplot)
+
+    results_summary = {'results': results}
+    pickle.dump(results_summary, open("results_{}_{}_{}_MCMCsummary_{}_{}.pkl".format(search_radius1, search_radius2, search_radius3,
+                                                                                      start_idx, end_idx), "wb"))
+
+parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
+parser.add_argument("--stepsize", required=True, nargs="+", type=float)
+parser.add_argument("--template",  required=True, type=int)
+parser.add_argument("--prefix",    required=True, type=str)
+parser.add_argument("--sampling", type=int, default=6)
+parser.add_argument("--start_idx", type=int, required=True)
+parser.add_argument("--end_idx", type=int, required=False, default=-1)
+parser.add_argument("--nsteps", type=int, required=False, default=100)
+parser.add_argument("--plot", type=int, required=False, default=0)
+parsed_args = parser.parse_args()
+
+global grid_sampling, start_idx, end_idx
+global max_iterations
+
+data_path     = parsed_args.prefix
+stepsizes     = np.asarray(parsed_args.stepsize)
+template      = parsed_args.template
+prefix        = parsed_args.prefix
+grid_sampling = parsed_args.sampling
+start_idx     = parsed_args.start_idx
+end_idx       = parsed_args.end_idx
+max_iterations= parsed_args.nsteps
+do_plot       = parsed_args.plot
+
+if end_idx == -1:
+    end_idx = start_idx + 1
+else:
+    assert (start_idx < end_idx), "start index is less than end index,"
+    
+# load the predefined offset field interpolator
+pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
+xs = np.array(pickled_data["x"])
+ys = np.array(pickled_data["y"])
+xys = list(zip(xs, ys))
+interpolator_org_x = pickled_data["interpolator_x"]
+interpolator_org_y = pickled_data["interpolator_y"]
+
+stepsize = [None, None, None]
+for i, _ in enumerate(stepsizes):
+    stepsize[i] = stepsizes[i]
+run(*stepsize, template=template, prefix=prefix, doplot=doplot)
