@@ -30,6 +30,8 @@ plt.rcParams['xtick.labelsize'] = 14
 plt.rcParams['ytick.labelsize'] = 14
 plt.rcParams['lines.linewidth'] = 2
 
+global grid_sampling#, start_idx, end_idx
+
 def calculate_integral(x_pos, y_pos, xo, yo, amp, sigma):
     max_x = max(x_pos, xo)+100
     min_x = min(x_pos, xo)-100
@@ -80,7 +82,7 @@ def proper_fit_vecfunc(inputs):
             condition = 1
         if (sigmas[iDither] < sigma_limits[0]) or (sigmas[iDither] > sigma_limits[1]):
             condition = 2
-        if amplitude < 1e-3:
+        if (amplitude < 1e-3):
             condition = 3
         if condition == 0:
             F[iDither] = np.sqrt(np.fabs(curr_signals[iDither]**2 -
@@ -133,10 +135,13 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         
     calc_offsets_x   = []
     calc_offsets_y   = []
+    calc_sigma       = []
+    calc_delta_sigma = []
+    calc_amplitude   = []
     calc_convergence = []
     calc_cost        = []
     #for iFiber in range(len(dithering_pos_xs[0])):
-    for iFiber in range(start_idx, end_idx):#(focal_xs[0]):
+    for iFiber in range(start_idx, end_idx):
         global curr_xs, curr_ys, curr_signals
         curr_focal_x = focal_xs[0][iFiber]
         curr_focal_y = focal_ys[0][iFiber]
@@ -162,9 +167,11 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         curr_signals  = np.asarray(curr_signals).flatten()
         retry = 0
         total_cost = 5000.
-        while (retry < 5) and (total_cost>2000.):
-            print("Initial guess results in high cost. Retrying...")
-            initial_guess = [np.random.uniform(1e-2, 0.2), np.random.uniform(-20., 20.), np.random.uniform(-20., 20.), np.random.uniform(30., 70.)]
+        while (retry < 50) and (total_cost>4000.):
+            x_guess = np.sum(curr_xs * curr_signals)/np.sum(curr_signals)
+            y_guess = np.sum(curr_ys * curr_signals)/np.sum(curr_signals)
+            amp_guess = np.mean(curr_signals/100.)
+            initial_guess = [amp_guess, x_guess, y_guess, np.random.uniform(30., 70.)]
             for iDither in range(len(curr_xs)):
                 initial_guess.append(np.random.uniform(-5., 5.))
             total_cost = np.sum(proper_fit_vecfunc(initial_guess))
@@ -181,6 +188,8 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         print("Convergence   : ", calc_values.success)
         print("Num of F ev   : ", calc_values.nfev)
         print("Solution      : A={} x={} y={}".format(calc_values.x[0], calc_values.x[1], calc_values.x[2]))
+        print("              : PSF={}".format(calc_values.x[3]))
+        print("              : delta(PSF)=", calc_values.x[4:])
         print("Fit results   : ", proper_fit_vecfunc(calc_values.x))
         print("Total cost    : ", np.sum(proper_fit_vecfunc(calc_values.x)))
         
@@ -188,19 +197,24 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         calc_y_offset = calc_values.x[2]
         calc_offsets_x.append(calc_x_offset)
         calc_offsets_y.append(calc_y_offset)
+        calc_sigma.append(calc_values.x[3])
+        calc_delta_sigma.append(calc_values.x[4:])
         calc_convergence.append(calc_values.success)
+        calc_amplitude.append(calc_values.x[0])
         calc_cost.append(np.sum(proper_fit_vecfunc(calc_values.x)))
         del curr_xs, curr_ys, curr_signals
         
     calc_offsets_x = np.array(calc_offsets_x)
     calc_offsets_y = np.array(calc_offsets_y)
-    return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_convergence, calc_cost
 
-def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=None):
+    return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
+
+def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, grid_sampling=20):
     max_value = 30.
     
     # calculate the values for a combination of search radii
-    focal_x, focal_y, calc_offset_x, calc_offset_y, calc_convergence, calc_cost = run_analysis("triangle", 
+    focal_x, focal_y, calc_offset_x, calc_offset_y, calc_sigma, \
+        calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost = run_analysis("triangle", 
                                                                                                search_radius1,
                                                                                                search_radius2,
                                                                                                search_radius3,
@@ -210,166 +224,41 @@ def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=
                        'focal_y': focal_y,
                        'calc_offset_x': calc_offset_x,
                        'calc_offset_y': calc_offset_y,
+                       'calc_sigma': calc_sigma,
+                       'calc_delta_sigma': calc_delta_sigma,
+                       'calc_amplitude': calc_amplitude,
                        'calc_convergence': calc_convergence,
                        'calc_cost': calc_cost}
     pickle.dump(results_summary, open("results_{}_{}_summary_{}_{}.pkl".format(search_radius1, search_radius2, start_idx, end_idx), "wb"))
 
-    """
-    # put the numbers into interpolators
-    calc_offset_r = np.sqrt(calc_offset_x**2 + calc_offset_y**2)
-    selected      = calc_offset_r <= max_value
-    focal_xy      = list(zip(focal_x[selected], focal_y[selected]))
-    interpolator_x = CloughTocher2DInterpolator(focal_xy, calc_offset_x[selected])
-    interpolator_y = CloughTocher2DInterpolator(focal_xy, calc_offset_y[selected])
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
+    parser.add_argument("--stepsize", required=True, nargs="+", type=float)
+    parser.add_argument("--template",  required=True, type=int)
+    parser.add_argument("--prefix",    required=True, type=str)
+    parser.add_argument("--sampling", type=int, default=6)
+    parser.add_argument("--start_idx", type=int, required=True)
+    parser.add_argument("--end_idx", type=int, required=True)
+    parsed_args = parser.parse_args()
 
-    # calculate the interpolated values at the grid points
-    cx = interpolator_x(xys)
-    cy = interpolator_y(xys)
-    cr = np.sqrt(cx**2+cy**2)
+    data_path     = parsed_args.prefix
+    stepsizes     = np.asarray(parsed_args.stepsize)
+    template      = parsed_args.template
+    prefix        = parsed_args.prefix
+    grid_sampling = parsed_args.sampling
+    start_idx     = parsed_args.start_idx
+    end_idx       = parsed_args.end_idx
     
-    # draw the figure for calculated offsets less than 50um
-    r = 410
-
-    # calculate the interpolated values at the grid points
-    cx_org = interpolator_org_x(xys)
-    cy_org = interpolator_org_y(xys)
-    cr_org = np.sqrt(cx_org**2+cy_org**2)
-
-    # draw the figure for calculated offsets less than 50um
-    diff_cx = cx_org-cx
-    diff_cy = cy_org-cy
-    selected3 = (diff_cx == diff_cx)
-    diff_cr = np.sqrt(diff_cx**2 + diff_cy**2)
-
-    sampling = 2
-    sampling_check = np.full(len(cr), False)
-    sampling_check[::sampling] = True
-    nan_check_calc = cr==cr
-    nan_check_in   = cr_org==cr_org
-    nan_check_res  = diff_cr==diff_cr
-    max_val_check  = cr<=max_value
-    last_selection = np.logical_and(sampling_check,
-                                    (np.logical_and(np.logical_and(nan_check_calc, nan_check_in),
-                                                    np.logical_and(nan_check_res, max_val_check))))
-    fig = plt.figure(figsize=(25, 25))
-
-    cmap = cm.get_cmap('PuRd')
-    norm = mpl.colors.Normalize(vmin=0.,vmax=max_value,clip=False)
+    # load the predefined offset field interpolator
+    pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
+    xs = np.array(pickled_data["x"])
+    ys = np.array(pickled_data["y"])
+    xys = list(zip(xs, ys))
+    interpolator_org_x = pickled_data["interpolator_x"]
+    interpolator_org_y = pickled_data["interpolator_y"]
     
-    plt.subplot(221)
-    plt.quiver(xs[last_selection], ys[last_selection],
-               np.array(cx_org[last_selection]), np.array(cy_org[last_selection]),
-               cr_org[last_selection], cmap=cmap, norm=norm)
-    plt.gca().set_aspect('equal','datalim')
-    plt.gca().add_artist(plt.Circle((0,0), r, color = 'r', fill=False))
-    cbar = plt.colorbar(fraction=0.04, pad=0.04)
-    cbar.set_label("Offsets [um]")
-    plt.axis('off')
-    plt.title("Input Offsets")
-    plt.tight_layout()
-
-    plt.subplot(222)
-    plt.quiver(xs[last_selection], ys[last_selection],
-               -np.array(cx[last_selection]), -np.array(cy[last_selection]),
-               cr[last_selection], cmap=cmap, norm=norm)
-    plt.gca().set_aspect('equal','datalim')
-    plt.gca().add_artist(plt.Circle((0,0), r, color = 'r', fill=False))
-    cbar = plt.colorbar(fraction=0.04, pad=0.04)
-    cbar.set_label("Calc Offsets [um]")
-    plt.axis('off')
-    plt.title("Calculated Offsets")
-    plt.tight_layout()
-    if search_radius3 is None:
-        plt.title("{:.1f}um + {:.1f}um Triangulation Pattern".format(search_radius1, search_radius2))
-    else:
-        plt.title("{:.1f}um + {:.1f}um +{:.1f}um Triangulation Pattern".format(search_radius1, search_radius2, search_radius3))
-
-    plt.subplot(223)
-    plt.quiver(xs[last_selection], ys[last_selection],
-               np.array(diff_cx[last_selection]), np.array(diff_cy[last_selection]),
-               diff_cr[last_selection], cmap=cmap, norm=norm)
-    plt.gca().set_aspect('equal','datalim')
-    plt.gca().add_artist(plt.Circle((0,0), r, color = 'r', fill=False))
-    cbar = plt.colorbar(fraction=0.04, pad=0.04)
-    cbar.set_label("Residual Offsets [um]")
-    plt.axis('off')
-    plt.title("Residuals")
-    plt.tight_layout()
-
-    plt.subplot(224)
-    plt.hist(cr_org[last_selection], bins=100, label="known offsets", alpha=.5,
-             normed=True, histtype='step', color='red', linewidth=3)
-    plt.hist(diff_cr[last_selection], bins=100, label="Residuals", alpha=.5,
-             normed=True, histtype='step', color='blue', linewidth=3)
-    plt.legend()
-    plt.xlabel("Offset [um]")
-    if search_radius3 is None:
-        plt.savefig("{}/results_for_{}_{}.png".format(prefix, search_radius1, search_radius2))
-        plt.savefig("{}/results_for_{}_{}.pdf".format(prefix, search_radius1, search_radius2))
-    else:
-        plt.savefig("{}/results_for_{}_{}_{}.png".format(prefix, search_radius1, search_radius2, search_radius3))
-        plt.savefig("{}/results_for_{}_{}_{}.pdf".format(prefix, search_radius1, search_radius2, search_radius3))
-    plt.close(fig)
-
-    fig = plt.figure(figsize=(6,6))
-    plt.hist(cr_org[last_selection], bins=100, label="known offsets", alpha=.5,
-             normed=True, cumulative=True, histtype='step', color='red', linewidth=3)
-    plt.hist(diff_cr[last_selection], bins=100, label="Residuals", alpha=.5,
-             normed=True, cumulative=True, histtype='step', color='blue', linewidth=3)
-    plt.legend(loc=2)
-    plt.xlabel("Offset [um]")
-    if search_radius3 is None:
-        plt.savefig("{}/results_for_{}_{}_cumulative.png".format(prefix, search_radius1, search_radius2))
-        plt.savefig("{}/results_for_{}_{}_cumulative.pdf".format(prefix, search_radius1, search_radius2))
-    else:
-        plt.savefig("{}/results_for_{}_{}_{}_cumulative.png".format(prefix, search_radius1, search_radius2, search_radius3))
-        plt.savefig("{}/results_for_{}_{}_{}_cumulative.pdf".format(prefix, search_radius1, search_radius2, search_radius3))
-    plt.close(fig)
-    
-    results = {}
-    results["calc_offset_x"] = cx
-    results["calc_offset_y"] = cy
-    results["calc_offset_r"] = cr
-    results["known_offset_x"] = cx_org
-    results["known_offset_y"] = cy_org
-    results["known_offset_r"] = cr_org
-    results["residual_x"] = diff_cx
-    results["residual_y"] = diff_cy
-    results["residual_r"] = diff_cr
-    if search_radius3 is None:
-        pickle.dump(results, open("results_{}_{}.pkl".format(search_radius1, search_radius2), "wb"))
-    else:
-        pickle.dump(results, open("results_{}_{}_{}.pkl".format(search_radius1, search_radius2, search_radius3), "wb"))
-    """
-    
-parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
-parser.add_argument("--stepsize", required=True, nargs="+", type=float)
-parser.add_argument("--template",  required=True, type=int)
-parser.add_argument("--prefix",    required=True, type=str)
-parser.add_argument("--sampling", type=int, default=6)
-parser.add_argument("--start_idx", type=int, required=True)
-parser.add_argument("--end_idx", type=int, required=True)
-parsed_args = parser.parse_args()
-
-global grid_sampling, start_idx, end_idx
-data_path     = parsed_args.prefix
-stepsizes     = np.asarray(parsed_args.stepsize)
-template      = parsed_args.template
-prefix        = parsed_args.prefix
-grid_sampling = parsed_args.sampling
-start_idx     = parsed_args.start_idx
-end_idx       = parsed_args.end_idx
-
-# load the predefined offset field interpolator
-pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
-xs = np.array(pickled_data["x"])
-ys = np.array(pickled_data["y"])
-xys = list(zip(xs, ys))
-interpolator_org_x = pickled_data["interpolator_x"]
-interpolator_org_y = pickled_data["interpolator_y"]
-
-stepsize = [None, None, None]
-for i, _ in enumerate(stepsizes):
-    stepsize[i] = stepsizes[i]
-run(*stepsize, template=template, prefix=prefix)
+    stepsize = [None, None, None]
+    for i, _ in enumerate(stepsizes):
+        stepsize[i] = stepsizes[i]
+    run(*stepsize, start_idx=start_idx, end_idx=end_idx, template=template, prefix=prefix, grid_sampling=grid_sampling)
 
