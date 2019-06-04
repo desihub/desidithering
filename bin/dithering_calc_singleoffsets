@@ -93,26 +93,29 @@ def proper_fit_vecfunc(inputs):
         F[num_dithering_points+iDummy] = 1e-12
     return F
 
-def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1):
+def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1, seeing_rms=0.00001):
     filenames = []
     # two files to be combine by default
     # in case a third search radius is defined, add it to the list as well
-    filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                        search_radius1,
-                                                                                                                        pattern,
-                                                                                                                        template,
-                                                                                                                        template))
-    filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                        search_radius2,
-                                                                                                                        pattern,
-                                                                                                                        template,
-                                                                                                                        template))
+    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                   search_radius1,
+                                                                                                                   pattern,
+                                                                                                                   seeing_rms,
+                                                                                                                   template,
+                                                                                                                   template))
+    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                   search_radius2,
+                                                                                                                   pattern,
+                                                                                                                   seeing_rms,
+                                                                                                                   template,
+                                                                                                                   template))
     try:
-        filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                            search_radius3,
-                                                                                                                            pattern,
-                                                                                                                            template,
-                                                                                                                            template))
+        filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
+                                                                                                                       search_radius3,
+                                                                                                                       pattern,
+                                                                                                                       seeing_rms,
+                                                                                                                       template,
+                                                                                                                       template))
     except:
         pass
 
@@ -221,16 +224,17 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
 
     return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
 
-def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, grid_sampling=20):
+def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, grid_sampling=20, seeing_rms=0.00001):
     max_value = 30.
     
     # calculate the values for a combination of search radii
     focal_x, focal_y, calc_offset_x, calc_offset_y, calc_sigma, \
         calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost = run_analysis("triangle", 
-                                                                                               search_radius1,
-                                                                                               search_radius2,
-                                                                                               search_radius3,
-                                                                                               template=template)
+                                                                                     search_radius1,
+                                                                                     search_radius2,
+                                                                                     search_radius3,
+                                                                                     template=template,
+                                                                                     seeing_rms=seeing_rms)
 
     results_summary = {'focal_x': focal_x,
                        'focal_y': focal_y,
@@ -251,6 +255,7 @@ if __name__ == "__main__":
     parser.add_argument("--sampling", type=int, default=6)
     parser.add_argument("--start_idx", type=int, required=True)
     parser.add_argument("--end_idx", type=int, required=True)
+    parser.add_argument("--seeing_rms", type=str, required=False, default="0.00001")
     parsed_args = parser.parse_args()
 
     data_path     = parsed_args.prefix
@@ -260,6 +265,7 @@ if __name__ == "__main__":
     grid_sampling = parsed_args.sampling
     start_idx     = parsed_args.start_idx
     end_idx       = parsed_args.end_idx
+    seeing_rms    = parsed_args.seeing_rms
     
     # load the predefined offset field interpolator
     pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
@@ -272,5 +278,5 @@ if __name__ == "__main__":
     stepsize = [None, None, None]
     for i, _ in enumerate(stepsizes):
         stepsize[i] = stepsizes[i]
-    run(*stepsize, start_idx=start_idx, end_idx=end_idx, template=template, prefix=prefix, grid_sampling=grid_sampling)
+    run(*stepsize, start_idx=start_idx, end_idx=end_idx, template=template, prefix=prefix, grid_sampling=grid_sampling, seeing_rms=seeing_rms)
 
