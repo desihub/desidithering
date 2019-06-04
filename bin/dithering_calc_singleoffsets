@@ -18,9 +18,9 @@ from matplotlib import rcParams
 from astropy.io import fits
 from astropy import table
 
-from scipy.interpolate import interp2d
-from scipy.interpolate import CloughTocher2DInterpolator
-from scipy.interpolate import SmoothBivariateSpline
+#from scipy.interpolate import interp2d
+#from scipy.interpolate import CloughTocher2DInterpolator
+#from scipy.interpolate import SmoothBivariateSpline
 from scipy.optimize import fsolve
 from scipy.optimize import minimize
 from scipy.optimize import root
@@ -90,7 +90,7 @@ def proper_fit_vecfunc(inputs):
         else:
             F[iDither] = 1e12
     for iDummy in range(4):
-        F[num_dithering_points+iDummy] = 1e-5
+        F[num_dithering_points+iDummy] = 1e-12
     return F
 
 def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1):
@@ -98,21 +98,21 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
     # two files to be combine by default
     # in case a third search radius is defined, add it to the list as well
     filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                                 search_radius1,
-                                                                                                                                 pattern,
-                                                                                                                                 template,
-                                                                                                                                 template))
+                                                                                                                        search_radius1,
+                                                                                                                        pattern,
+                                                                                                                        template,
+                                                                                                                        template))
     filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                                 search_radius2,
-                                                                                                                                 pattern,
-                                                                                                                                 template,
-                                                                                                                                 template))
+                                                                                                                        search_radius2,
+                                                                                                                        pattern,
+                                                                                                                        template,
+                                                                                                                        template))
     try:
         filenames.append("{}/{:.1f}um/result_{}_seeing0.00001_blur_wlenoffset-randoffset{}_combined_template{}.fits".format(data_path,
-                                                                                                                                     search_radius3,
-                                                                                                                                     pattern,
-                                                                                                                                     template,
-                                                                                                                                     template))
+                                                                                                                            search_radius3,
+                                                                                                                            pattern,
+                                                                                                                            template,
+                                                                                                                            template))
     except:
         pass
 
@@ -166,20 +166,32 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         curr_ys = np.asarray(curr_ys).flatten()
         curr_signals  = np.asarray(curr_signals).flatten()
         retry = 0
-        total_cost = 5000.
-        while (retry < 50) and (total_cost>4000.):
-            x_guess = np.sum(curr_xs * curr_signals)/np.sum(curr_signals)
-            y_guess = np.sum(curr_ys * curr_signals)/np.sum(curr_signals)
-            amp_guess = np.mean(curr_signals/100.)
+        x_guess = np.sum(curr_xs * curr_signals)/np.sum(curr_signals)
+        y_guess = np.sum(curr_ys * curr_signals)/np.sum(curr_signals)
+        amp_guess = np.mean(curr_signals/100.)
+        initial_guess = [amp_guess, x_guess, y_guess, np.random.uniform(30., 70.)]
+        for iDither in range(len(curr_xs)):
+            initial_guess.append(np.random.uniform(-5., 5.))
+        total_cost = np.sum(proper_fit_vecfunc(initial_guess))
+        while  (total_cost > 40000.) and (retry < 100):
+            #x_guess = np.sum(curr_xs * curr_signals)/np.sum(curr_signals)
+            #y_guess = np.sum(curr_ys * curr_signals)/np.sum(curr_signals)
+            #amp_guess = np.mean(curr_signals/100.)
             initial_guess = [amp_guess, x_guess, y_guess, np.random.uniform(30., 70.)]
             for iDither in range(len(curr_xs)):
                 initial_guess.append(np.random.uniform(-5., 5.))
             total_cost = np.sum(proper_fit_vecfunc(initial_guess))
+            print(retry, total_cost, ((retry<100)and(total_cost<50000.)))
             retry     +=1
         print("Fiber ID      : ", iFiber)
         proper_fit_vecfunc(np.zeros(len(initial_guess)))
         print("Initial cost  : ", np.sum(proper_fit_vecfunc(initial_guess)))
         calc_values = root(proper_fit_vecfunc, x0=initial_guess,
+                           method='lm',
+                           options={'ftol': 1e-15, 'xtol':1e-15,
+                                    'factor': 50, 'eps': 10.,
+                                    'gtol': 1e-15, 'maxiter': 5000})
+        calc_values = root(proper_fit_vecfunc, x0=calc_values.x,
                            method='lm',
                            options={'ftol': 1e-15, 'xtol':1e-15,
                                     'factor': 50, 'eps': 10.,
@@ -254,8 +266,8 @@ if __name__ == "__main__":
     xs = np.array(pickled_data["x"])
     ys = np.array(pickled_data["y"])
     xys = list(zip(xs, ys))
-    interpolator_org_x = pickled_data["interpolator_x"]
-    interpolator_org_y = pickled_data["interpolator_y"]
+    #interpolator_org_x = pickled_data["interpolator_x"]
+    #interpolator_org_y = pickled_data["interpolator_y"]
     
     stepsize = [None, None, None]
     for i, _ in enumerate(stepsizes):
