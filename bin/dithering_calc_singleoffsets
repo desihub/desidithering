@@ -25,6 +25,8 @@ from scipy.optimize import fsolve
 from scipy.optimize import minimize
 from scipy.optimize import root
 
+import dithering_print_offsets
+
 plt.rcParams['font.family'] = "sans-serif"       
 plt.rcParams['xtick.labelsize'] = 14
 plt.rcParams['ytick.labelsize'] = 14
@@ -136,6 +138,10 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         focal_ys.append(hdus[1].data['focal_y'])
         mags.append(hdus[1].data['mag'])
         
+    input_focal_x    = []
+    input_focal_y    = []
+    printed_offsets_x= []
+    printed_offsets_y= []
     calc_offsets_x   = []
     calc_offsets_y   = []
     calc_sigma       = []
@@ -186,7 +192,10 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
             total_cost = np.sum(proper_fit_vecfunc(initial_guess))
             print(retry, total_cost, ((retry<100)and(total_cost<50000.)))
             retry     +=1
+        printed_offset = dithering_print_offsets.print_offset(curr_focal_x, curr_focal_y)
         print("Fiber ID      : ", iFiber)
+        print("Focal position: ", curr_focal_x, curr_focal_y)
+        print("offset        : ", printed_offset[0], printed_offset[1])
         proper_fit_vecfunc(np.zeros(len(initial_guess)))
         print("Initial cost  : ", np.sum(proper_fit_vecfunc(initial_guess)))
         calc_values = root(proper_fit_vecfunc, x0=initial_guess,
@@ -207,7 +216,11 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         print("              : delta(PSF)=", calc_values.x[4:])
         print("Fit results   : ", proper_fit_vecfunc(calc_values.x))
         print("Total cost    : ", np.sum(proper_fit_vecfunc(calc_values.x)))
-        
+
+        input_focal_x.append(curr_focal_x)
+        input_focal_y.append(curr_focal_y)
+        printed_offsets_x.append(printed_offset[0])
+        printed_offsets_y.append(printed_offset[1])
         calc_x_offset = calc_values.x[1]
         calc_y_offset = calc_values.x[2]
         calc_offsets_x.append(calc_x_offset)
@@ -222,7 +235,8 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
     calc_offsets_x = np.array(calc_offsets_x)
     calc_offsets_y = np.array(calc_offsets_y)
 
-    return focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
+    return input_focal_x, input_focal_y, calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
+    #focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
 
 def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, grid_sampling=20, seeing_rms=0.00001):
     max_value = 30.

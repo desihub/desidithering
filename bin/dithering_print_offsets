@@ -1,0 +1,55 @@
+#!/bin/python
+
+import math
+from astropy.io import fits
+from astropy import table
+import numpy as np
+import argparse
+
+from scipy.interpolate import interp2d
+from scipy.interpolate import CloughTocher2DInterpolator
+import pickle
+import sys
+import astropy.units as u
+
+from astropy import wcs
+
+pickled_data = None
+#interpolator_org_x = None
+#interpolator_org_y = None
+
+def load_offsets(template):
+    # load the predefined offset field interpolator
+    global pickled_data
+    pickled_data = pickle.load(open("../data/offset_field{}_CT2D.pkl".format(template), "rb"))
+    #xs = np.array(pickled_data["x"])
+    #ys = np.array(pickled_data["y"])
+    #xys = list(zip(xs, ys))
+    global interpolator_org_x
+    global interpolator_org_y
+    interpolator_org_x = pickled_data["interpolator_x"]
+    interpolator_org_y = pickled_data["interpolator_y"]
+
+def print_offset(x, y, template=1):
+    if pickled_data is None:
+        print('loading the files')
+        load_offsets(template)
+    return interpolator_org_x(x, y), interpolator_org_y(x, y)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
+    parser.add_argument("--template",  required=True, type=int)
+    parser.add_argument("--x", required=True, type=float, nargs='+')
+    parser.add_argument("--y", required=True, type=float, nargs='+')
+    parsed_args = parser.parse_args()
+    template  = parsed_args.template
+    req_xs = parsed_args.x
+    req_ys = parsed_args.y
+
+    assert (len(req_xs) == len(req_ys)), 'incorrect number of arguments for x and y'
+
+    for i, _ in enumerate(req_xs):
+        calc_x, calc_y = print_offset(req_xs[i], req_ys[i], template)
+        print("Requested position: {}, {}".format(req_xs[i], req_ys[i]))
+        print("- Offsets: {:.2f}, {:.2f} ({:.2f})".format(calc_x, calc_y, np.sqrt(calc_x**2+calc_y**2)))
+        print()
