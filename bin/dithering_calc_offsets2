@@ -19,11 +19,6 @@ from sklearn.neighbors import KDTree
 
 import dithering_print_offsets
 
-plt.rcParams['font.family'] = "sans-serif"       
-plt.rcParams['xtick.labelsize'] = 14
-plt.rcParams['ytick.labelsize'] = 14
-plt.rcParams['lines.linewidth'] = 2
-
 global grid_sampling
 
 def calculate_integral(x_pos, y_pos, xo, yo, amp, sigma):
@@ -69,10 +64,6 @@ def SOE(x):
     for idx in range(n_fibers):
         for exp_idx in range(n_exposures):
             eqn_idx = idx*n_exposures + exp_idx
-            #print(idx, exp_idx, eqn_idx)
-            #print(curr_xs[eqn_idx], curr_ys[eqn_idx], x[idx*4:idx*4+4])
-            #print(calculate_integral(curr_xs[eqn_idx], curr_ys[eqn_idx],
-            #                                                   x[idx*4+0], x[idx*4+1], x[idx*4+2], x[idx*4+3]))
             curr_sigma = x[idx*4+3] + x[n_fibers*4+exp_idx]
             try:
                 curr_amp   = calculate_integral(curr_xs[eqn_idx], curr_ys[eqn_idx], x[idx*4+0], x[idx*4+1], x[idx*4+2], x[idx*4+3]) / \
@@ -187,7 +178,9 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
 
         curr_focal_x = focal_xs[0][iFiber]
         curr_focal_y = focal_ys[0][iFiber]
-        neighbors = tree.query_radius(focal_coordinates[iFiber].reshape(1, 2), r=10.0)[0]
+        neighbors = tree.query_radius(focal_coordinates[iFiber].reshape(1, 2), r=10.0)[0] # this is optional for now
+        neighbors = np.hstack(([iFiber], neighbors[np.where(neighbors!=iFiber)]))
+        print(neighbors)
         n_fibers = len(neighbors)
         #if n_fibers == 1:
         #    n_fibers += 1
@@ -254,84 +247,87 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, t
         curr_xs = np.asarray(curr_xs).flatten()
         curr_ys = np.asarray(curr_ys).flatten()
         curr_signals  = np.asarray(curr_signals).flatten()
-        initial_guess = np.zeros(n_unknowns)
-        for idx in range(n_fibers):
-            start_ = idx*n_exposures
-            end_   = (idx+1)*n_exposures
-            x_guess = np.sum(curr_xs[start_:end_] * curr_signals[start_:end_])/np.sum(curr_signals[start_:end_])#np.random.uniform(-10., 10.)#
-            y_guess = np.sum(curr_ys[start_:end_] * curr_signals[start_:end_])/np.sum(curr_signals[start_:end_])#np.random.uniform(-10., 10.)#
-            initial_guess[0+idx*4] = x_guess
-            initial_guess[1+idx*4] = y_guess
-            initial_guess[2+idx*4] = np.random.uniform(0.005, 0.02)
-            initial_guess[3+idx*4] = np.random.uniform(40., 60.)
-            signal_guess           = calculate_integral(curr_xs[start_], curr_ys[start_], \
-                                                        initial_guess[0+idx*4], initial_guess[1+idx*4], \
-                                                        initial_guess[2+idx*4], initial_guess[3+idx*4])
-            scaling_factor         = signal_guess/curr_signals[start_]
-            initial_guess[2+idx*4] /= scaling_factor*np.random.uniform(0.85, 1.15)
-        for idx in range(n_exposures):
-            initial_guess[n_fibers*4+idx] = np.random.uniform(-5., 5.)
-
-        print("- Initial guess: \n", initial_guess)
-        print("- Signals with initial guess: \n", SOE(initial_guess))
-        print("- Signals (measured): \n", curr_signals)
+        initial_guess = np.zeros(n_equations)
 
         try:
-            solution = opt.leastsq(system, initial_guess, args=curr_signals, full_output=True, factor=90., xtol=5e-9)#ftol=1e-15
-            solution_msg = solution[3]
-            solution_ier = solution[4]
-            cov_x        = solution[1]
-            solution_fev = solution[2]['nfev']
-            solution     = solution[0]
-            print("- Solution: \n", solution)
-            print("- Relative errors for exposures: \n", 100*np.fabs(SOE(np.asarray(solution)) - curr_signals)/curr_signals)
+            for idx in range(n_fibers):
+                start_ = idx*n_exposures
+                end_   = (idx+1)*n_exposures
+                x_guess = np.sum(curr_xs[start_:end_] * curr_signals[start_:end_])/np.sum(curr_signals[start_:end_])
+                y_guess = np.sum(curr_ys[start_:end_] * curr_signals[start_:end_])/np.sum(curr_signals[start_:end_])
+                initial_guess[0+idx*4] = x_guess
+                initial_guess[1+idx*4] = y_guess
+                initial_guess[2+idx*4] = np.random.uniform(0.005, 0.02)
+                initial_guess[3+idx*4] = np.random.uniform(40., 60.)
+                signal_guess           = calculate_integral(curr_xs[start_], curr_ys[start_], \
+                                                            initial_guess[0+idx*4], initial_guess[1+idx*4], \
+                                                            initial_guess[2+idx*4], initial_guess[3+idx*4])
+                scaling_factor         = signal_guess/curr_signals[start_]
+                initial_guess[2+idx*4] /= scaling_factor*np.random.uniform(0.85, 1.15)
+            for idx in range(n_exposures):
+                initial_guess[n_fibers*4+idx] = np.random.uniform(-5., 5.)
+
+            print("- Initial guess: \n", initial_guess[:n_unknowns])
+            print("- Signals with initial guess: \n", SOE(initial_guess))
+            print("- Signals (measured): \n", curr_signals)
+
+            solution = opt.root(system, initial_guess, args=curr_signals, method='lm', \
+                                options={'factor': 100., 'xtol': 1e-9, 'eps': 1., 'diag': 20*np.ones(n_equations)})
+            #solution = opt.root(system, solution.x, args=curr_signals, method='lm', options={'factor': 75., 'xtol': 5e-9})
+            solution_msg = solution.message
+            solution_ier = solution.success
+            solution_fev = solution.nfev
+            solution     = solution
+            print("- Solution: \n", solution.x[:n_unknowns])
+            print("- Relative errors for exposures: \n", 100*np.fabs(SOE(np.asarray(solution.x)) - curr_signals)/curr_signals)
             
             printed_offset = dithering_print_offsets.print_offset(curr_focal_x, curr_focal_y)
             print("Solver message: ", solution_msg)
             print("Convergence   : ", solution_ier)
             print("Num of F ev   : ", solution_fev)
             print("Printed offset: ", printed_offset[0], printed_offset[1])
-            print("Solution      : A={} x={} y={}".format(solution[2], solution[0], solution[1]))
-            print("              : PSF={}".format(solution[3]))
-            print("              : delta(PSF)=", solution[4*n_fibers:4*n_fibers+n_exposures])
-            #print("Fit results   : ", proper_fit_vecfunc(calc_values.x))
-            #print("Total cost    : ", np.sum(proper_fit_vecfunc(calc_values.x)))
+            print("Solution      : A={} x={} y={}".format(solution.x[2], solution.x[0], solution.x[1]))
+            print("              : PSF={}".format(solution.x[3]))
+            print("              : delta(PSF)=", solution.x[4*n_fibers:4*n_fibers+n_exposures])
             
             # add the results
             input_focal_x.append(curr_focal_x)
             input_focal_y.append(curr_focal_y)
             printed_offsets_x.append(printed_offset[0])
             printed_offsets_y.append(printed_offset[1])
-            calc_x_offset = solution[0]
-            calc_y_offset = solution[1]
+            calc_x_offset = solution.x[0]
+            calc_y_offset = solution.x[1]
             calc_offsets_x.append(calc_x_offset)
             calc_offsets_y.append(calc_y_offset)
-            calc_sigma.append(solution[3])
-            calc_delta_sigma.append(solution[4*n_fibers:4*n_fibers+n_exposures])
-            calc_convergence.append(None)#calc_values.success)
-            calc_amplitude.append(solution[2])
-            calc_cost.append(None)#np.sum(proper_fit_vecfunc(calc_values.x)))
-        except TypeError:
-            pass
+            calc_sigma.append(solution.x[3])
+            calc_delta_sigma.append(solution.x[4*n_fibers:4*n_fibers+n_exposures])
+            calc_convergence.append(solution.success)
+            calc_amplitude.append(solution.x[2])
+            calc_cost.append(None)
+        except IndexError:
+            continue
+            
         del curr_xs, curr_ys, curr_signals
         
     calc_offsets_x = np.array(calc_offsets_x)
     calc_offsets_y = np.array(calc_offsets_y)
 
-    return input_focal_x, input_focal_y, calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
+    return input_focal_x, input_focal_y, \
+        calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost, \
+        printed_offsets_x, printed_offsets_y
     #focal_xs[0], focal_ys[0], calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost
 
 def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, grid_sampling=20, seeing_rms=0.00001):
-    max_value = 30.
     
     # calculate the values for a combination of search radii
     focal_x, focal_y, calc_offset_x, calc_offset_y, calc_sigma, \
-        calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost = run_analysis(pattern, #"triangle", 
-                                                                                     search_radius1,
-                                                                                     search_radius2,
-                                                                                     search_radius3,
-                                                                                     template=template,
-                                                                                     seeing_rms=seeing_rms)
+        calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost, \
+        printed_offsets_x, printed_offsets_y = run_analysis(pattern, #"triangle", 
+                                                            search_radius1,
+                                                            search_radius2,
+                                                            search_radius3,
+                                                            template=template,
+                                                            seeing_rms=seeing_rms)
 
     results_summary = {'focal_x': focal_x,
                        'focal_y': focal_y,
@@ -341,8 +337,11 @@ def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_id
                        'calc_delta_sigma': calc_delta_sigma,
                        'calc_amplitude': calc_amplitude,
                        'calc_convergence': calc_convergence,
-                       'calc_cost': calc_cost}
-    pickle.dump(results_summary, open("results_{}_{}_summary_{}_{}.pkl".format(search_radius1, search_radius2, start_idx, end_idx), "wb"))
+                       'calc_cost': calc_cost,
+                       'printed_offset_x': printed_offsets_x,
+                       'printed_offset_y': printed_offsets_y}
+    
+    pickle.dump(results_summary, open("results_{}_{}_summary_{}_{}_new.pkl".format(search_radius1, search_radius2, start_idx, end_idx), "wb"))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Script to combine and analyze different search radii")
