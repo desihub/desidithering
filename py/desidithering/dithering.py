@@ -243,7 +243,6 @@ class dithering:
     """
     def get_fiber_acceptance_fraction(self, source_type, source_fraction, source_half_light_radius,
                                       source_minor_major_axis_ratio, source_position_angle):
-        start_time = time.time()
         """
         THIS PART IS NOT NEEDED AND SLOWS DOWN THE SCRIPT CONSIDERABLY
         WILL REMOVE IN THE NEXT ITERATION
@@ -254,6 +253,8 @@ class dithering:
         print("getting focal plane optics took {} s for wlen_grid size of {}".format(time.time()-start_time, len(self.wlen_grid)))
         """
         start_time = time.time()
+        #print(self.focal_x, self.focal_y)
+        ##### print(self.desi.source, 
         self.fiber_acceptance_fraction = floss.calculate_fiber_acceptance_fraction(self.focal_x, self.focal_y, self.wlen_grid,
                                                                                    self.desi.source, self.desi.atmosphere, self.desi.instrument,
                                                                                    source_type, source_fraction, source_half_light_radius,
@@ -284,7 +285,6 @@ class dithering:
                        airmass_offset=0):
         # store the variables in a local variable to revert back at the end
         self.desi.atmosphere.seeing_fwhm_ref = self.seeing_ref + seeing_fwhm_ref_offset
-        start_time = time.time()
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
         start_time = time.time()
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
