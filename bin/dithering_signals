@@ -455,11 +455,6 @@ for i in range(num_pointings):
             fiber_ids[j] = setid*1000 + j
             f_ins[j] = f_in[::10]
 
-            import matplotlib.pyplot as plt
-            plt.plot(w_in[::10], f_in[::10])
-            plt.plot(w_in[::10], f_ins[j])
-            plt.show()
-            
             dither_xs[j]    = np.array(xs)
             dither_ys[j]    = np.array(ys)
             calc_snrs_b[j]    = np.array(SNRs.T[0])
@@ -559,10 +554,6 @@ for i in range(num_pointings):
          fits.Column(name="f_in",               array=f_ins, format="{}E".format(num_wavelengths)),
         ], header=hodor)
     hdulist.append(thdu)
-
-    import matplotlib.pyplot as plt
-    plt.plot(w_in[::10], f_ins[0])
-    plt.show()
     
 try:
     print("making directory: {}/data".format(prefix))
