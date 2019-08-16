@@ -14,7 +14,6 @@ from astropy.io import fits
 from astropy import table
 
 from desidithering import dithering as Dithering
-#from desidithering import extract_spectrum as es
 import argparse
 import time
 
@@ -49,13 +48,6 @@ def twoD_ellipticGaussian(xy_tuple, amplitude, xo, yo, sigma_1, sigma_2, phi):
     g = amplitude * np.exp( -0.5 * ( A*(x-xo)**2 + B*(y-yo)**2 + C*(x-xo)*(y-yo) ) )
     return g.ravel()
 
-def calc_signal_at_position():
-    return None
-
-def cost_function():
-    return None
-
-
 check_angles_primary   = { 0: [-30., -150.],
                            1: [-30., 90],
                            2: [-150., 90.],
@@ -64,6 +56,7 @@ check_angles_secondary = { 0: {4: [60.0,  240.0, 330.0], 5: [120.0, 210.0, 300.0
                            1: {4: [60.0,  240.0, 330.0], 5: [0.0,   90.0,  180.0]},
                            2: {4: [120.0, 210.0, 300.0], 5: [0.0,   90.0,  180.0]},
                            3: {4: [60.0,  240.0, 330.0], 5: [120.0, 210.0, 300.0]} }
+
 def run_simulation_triangulate(dithering, source, source_id, random_seeing_offsets, random_airmass_offsets, pos_rms):
     # generate the random offset but not reveal it to user until the end
     x_offset = tabled_x_offsets[source_id]
@@ -77,9 +70,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
         
     dithering.set_focal_position_simple(tabled_x_pos[source_id], tabled_y_pos[source_id])
 
-    #if pos_rms > 0:
-    #    dithering.place_fiber([pos_x_err, pos_y_err])
-    #dithering.place_fiber(pos_x_err[0], pos_y_err[0])
     dithering.set_theta_0(-5.*u.deg)
     dithering.set_phi_0(10.*u.deg)
     SNR    = []
@@ -91,10 +81,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     focal_y = dithering.focal_y[0]
 
     # initial point
-    #if pos_rms > 0:
-    #    dithering.place_fiber([x_offset+pos_x_err[0], y_offset+pos_y_err[0]])
-    #else:
-    #    dithering.place_fiber([x_offset, y_offset])
     dithering.place_fiber([x_offset+pos_x_err[0], y_offset+pos_y_err[0]])
     start_time = time.time()
     dithering.run_simulation(source_type, *source, report=False, \
@@ -111,17 +97,12 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     # -- first dither
     x_dither = search_radius*np.cos(30.*u.deg)
     y_dither = search_radius*np.sin(30.*u.deg)
-    #if pos_rms > 0:
-    #    dithering.place_fiber([x_offset+x_dither+pos_x_err[1], y_offset+y_dither+pos_y_err[1]])
-    #else:
-    #    dithering.place_fiber([x_offset+x_dither, y_offset+y_dither])
+
     dithering.place_fiber([x_offset+x_dither+pos_x_err[1], y_offset+y_dither+pos_y_err[1]])
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[1], airmass_offset=random_airmass_offsets[1])
     SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
     signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
-    #SNR.append(np.median(dithering.SNR['b'][0]))
-    #signal.append(np.median(dithering.signal['b'][0]))
     x.append(x_dither)
     y.append(y_dither)
 
@@ -131,8 +112,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     dithering.place_fiber([x_offset+x_dither+pos_x_err[2], y_offset+y_dither+pos_y_err[2]])
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[2], airmass_offset=random_airmass_offsets[2])
-    #SNR.append(np.median(dithering.SNR['b'][0]))
-    #signal.append(np.median(dithering.signal['b'][0]))
     SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
     signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
     x.append(x_dither)
@@ -144,8 +123,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     dithering.place_fiber([x_offset+x_dither+pos_x_err[3], y_offset+y_dither+pos_y_err[3]])
     dithering.run_simulation(source_type, *source, report=False, \
                              seeing_fwhm_ref_offset=random_seeing_offsets[3], airmass_offset=random_airmass_offsets[3])
-    #SNR.append(np.median(dithering.SNR['b'][0]))
-    #signal.append(np.median(dithering.signal['b'][0]))
     SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
     signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
     x.append(x_dither)
@@ -161,8 +138,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
         dithering.place_fiber([x_offset+x_dither+pos_x_err[4+i], y_offset+y_dither+pos_y_err[4+i]])
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[4+i], airmass_offset=random_airmass_offsets[4+i])
-        #SNR.append(np.median(dithering.SNR['b'][0]))
-        #signal.append(np.median(dithering.signal['b'][0]))
         SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
         signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
         x.append(x_dither)
@@ -182,8 +157,6 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
                                  seeing_fwhm_ref_offset=random_seeing_offsets[6+i], airmass_offset=random_airmass_offsets[6+i])
         SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
         signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
-        #SNR.append(np.median(dithering.SNR['b'][0]))
-        #signal.append(np.median(dithering.signal['b'][0]))
         x.append(x_dither)
         y.append(y_dither)
         
@@ -225,8 +198,6 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[i], \
                                  airmass_offset=random_airmass_offsets[i])
-        #SNR.append(np.median(dithering.SNR['b'][0]))
-        #signal.append(np.median(dithering.signal['b'][0]))
         SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
         signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
         x.append(x_pos_moves[i]+pos_x_err[i])
@@ -331,9 +302,6 @@ else:
 # generate the fits file primary header
 prihdr = fits.Header()
 prihdr['COMMENT'] = "The config file used is {}.".format(config_file)
-#prihdr["COMMENT"] = "From a uniform distribution with [0, 30), random pointings were chosen"
-#prihdr['COMMENT'] = "For each boresight altitude and azimuth, there are {} sources randomly located (-1, 1) degrees of the boresight.".format(num_sources)
-#prihdr["HLR"]     = half_light_radius
 prihdu  = fits.PrimaryHDU(header=prihdr)
 hdulist = fits.HDUList([prihdu])
 
@@ -413,9 +381,11 @@ for i in range(num_pointings):
         f_in = tabled_fluxes[j]
         mag  = tabled_mags[j]
         
-        dithering.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+        dithering.desi.source.update_in("F type star", "star",
+                                        w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
-        dithering_pure.desi.source.update_in("F type star", "star", w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+        dithering_pure.desi.source.update_in("F type star", "star",
+                                             w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering_pure.desi.source.update_out()
         
         dithering_pure.set_focal_position_simple(tabled_x_pos[j], tabled_y_pos[j])
@@ -425,22 +395,25 @@ for i in range(num_pointings):
                                       seeing_fwhm_ref_offset=1e-12*u.arcsec, airmass_offset=1e-12)
 
         
-        if True:
+        try:
             x_offset = tabled_x_offsets[j]
             y_offset = tabled_y_offsets[j]
             focal_x  = tabled_x_pos[j]
             focal_y  = tabled_y_pos[j]
 
             if pattern == 1:
-                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
+                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j,
+                                                                   random_seeing_fwhm_ref_offsets,
+                                                                   random_airmass_offsets, pos_rms)
             elif pattern == 0:
-                xs, ys, signals, SNRs = run_simulation_triangulate(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms)
+                xs, ys, signals, SNRs = run_simulation_triangulate(dithering, source, j,
+                                                                   random_seeing_fwhm_ref_offsets,
+                                                                   random_airmass_offsets, pos_rms)
             else:
-                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j, random_seeing_fwhm_ref_offsets, random_airmass_offsets, pos_rms, is_random=True)
+                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j,
+                                                                   random_seeing_fwhm_ref_offsets,
+                                                                   random_airmass_offsets, pos_rms, is_random=True)
 
-            #opt_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma, opt_phi= fit_simulation(xs, ys, signals, SNRs)
-            #dithering.place_fiber([x_offset+opt_x_offset, y_offset+opt_y_offset])
-            #dithering.run_simulation(source_type, *source, report=False)
             signals = np.asarray(signals)
             SNRs    = np.asarray(SNRs)
             
@@ -453,8 +426,13 @@ for i in range(num_pointings):
             magnitudes[j] = np.array(mag)
 
             fiber_ids[j] = setid*1000 + j
-            f_ins[j] = f_in[::10]
-
+            # for some reason, (i don't care for now) there is sometimes
+            # error with the size of the array. TODO: Take a look at this later.
+            try:
+                f_ins[j] = f_in[::10]
+            except:
+                f_ins[j] = f_in[1::10]
+                
             dither_xs[j]    = np.array(xs)
             dither_ys[j]    = np.array(ys)
             calc_snrs_b[j]    = np.array(SNRs.T[0])
@@ -464,12 +442,6 @@ for i in range(num_pointings):
             calc_signals_r[j] = np.array(signals.T[1])
             calc_signals_z[j] = np.array(signals.T[2])
 
-            
-            #calc_offset_x[j] = opt_x_offset
-            #calc_offset_y[j] = opt_y_offset
-            #calc_sigma_x[j] = opt_x_sigma
-            #calc_sigma_y[j] = opt_y_sigma
-                        
             calc_snr_b[j] = (np.median(dithering.SNR['b'][0]))
             calc_snr_r[j] = (np.median(dithering.SNR['r'][0]))
             calc_snr_z[j] = (np.median(dithering.SNR['z'][0]))
@@ -485,13 +457,12 @@ for i in range(num_pointings):
             known_signal_z[j] = (np.median(dithering_pure.signal['z'][0]))
 
             del focal_x, focal_y, x_offset, y_offset
-            del mag, f_in#, w_in
+            del f_in, mag
             del xs, ys, SNRs, signals
-            #del op_x_offset, opt_y_offset, opt_x_sigma, opt_y_sigma
             del dithering.SNR, dithering.signal
             del dithering_pure.SNR, dithering_pure.signal
             
-        else:
+        except:
             if parsed_args.verbose:
                 print("problem with the current fiber dithering {}... moving to the next one...".format(j))
             continue
