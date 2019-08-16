@@ -5,7 +5,7 @@ name: DESI QuickSim
 base_path: '{DESI_SPECTRO_DATA}/'
 
 # Be verbose during the simulation?
-verbose: yes
+verbose: false
 
 # Specify the wavelength grid to use for simulation. For comparison, the
 # table below summarizes the ranges of non-zero throughput in each camera,
@@ -98,7 +98,7 @@ atmosphere:
     # and observation parameters. The focal_x and focal_y parameters of
     # source.location.constants must be set in order for the airmass
     # specified here to be used.
-    airmass: 1.0
+    airmass: 1.1
 
 # The instrument configuration is interpreted and validated by the
 # specsim.instrument module.
@@ -129,7 +129,7 @@ instrument:
         method: galsim
         # Number of wavelengths where fiberloss should be calculated
         # and interpolated. Ignored unless method is galsim.
-        num_wlen: 11
+        num_wlen: 20
         # Number of pixels used to subdivide the fiber diameter for
         # numerical convolution and integration calculations with galsim.
         num_pixels: 16
