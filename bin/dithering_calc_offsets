@@ -329,7 +329,7 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
                                           seeing_fwhm_ref_offset=0.*u.arcsec,
                                           airmass_offset=0.)
             exp_signal =np.median(dithering_orig.signal['b'][0])
-            exp_signals.append(abs_signal)
+            exp_signals.append(exp_signal)
             print("Result at original position: ", exp_signal)
             dithering_orig.place_fiber([printed_offset[0], printed_offset[1]])
             dithering_orig.run_simulation('qso', *source, report=False, \
