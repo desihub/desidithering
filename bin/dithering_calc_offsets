@@ -47,7 +47,7 @@ def SOE(par, norms):
             delta_airmass = 1e-12#x[n_fibers*2+exp_idx*2+1]
             eqn_idx = idx*n_exposures + exp_idx
             dithering[neighbors[idx]].set_focal_position_simple(curr_focal_xs[idx]+offset_x_mm, curr_focal_ys[idx]+offset_y_mm)
-            dithering[neighbors[idx]].place_fiber([curr_xs[eqn_idx]+offset_x_um, curr_ys[eqn_idx]+offset_y_um])
+            dithering[neighbors[idx]].place_fiber([curr_xs[eqn_idx], curr_ys[eqn_idx]])
             dithering[neighbors[idx]].run_simulation('qso', *source, report=False, \
                                                      seeing_fwhm_ref_offset=delta_seeing,
                                                      airmass_offset=delta_airmass)
@@ -62,8 +62,7 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
     global n_equations, n_unknowns, n_unknown_per_exposure
     global seeing, airmass
     
-    #correlation_distance = 2.0
-    data_path = prefix#"../dithering-results/results_updated"
+    data_path = prefix
 
     filenames = []
     # two files to be combine by default
@@ -91,25 +90,25 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
     except:
         pass
     """
-    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}combined_template{}.fits".format(data_path,
-                                                                                             search_radius1,
-                                                                                             pattern,
-                                                                                             seeing_rms,
-                                                                                             config_suffix,
-                                                                                             template))
-    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}combined_template{}.fits".format(data_path,
-                                                                                             search_radius2,
-                                                                                             pattern,
-                                                                                             seeing_rms,
-                                                                                             config_suffix,
-                                                                                             template))
+    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                              search_radius1,
+                                                                                              pattern,
+                                                                                              seeing_rms,
+                                                                                              config_suffix,
+                                                                                              template))
+    filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                              search_radius2,
+                                                                                              pattern,
+                                                                                              seeing_rms,
+                                                                                              config_suffix,
+                                                                                              template))
     try:
-        filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}combined_template{}.fits".format(data_path,
-                                                                                                 search_radius3,
-                                                                                                 pattern,
-                                                                                                 seeing_rms,
-                                                                                                 config_suffix,
-                                                                                                 template))
+        filenames.append("{}/{:.1f}um/result_{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                                  search_radius3,
+                                                                                                  pattern,
+                                                                                                  seeing_rms,
+                                                                                                  config_suffix,
+                                                                                                  template))
     except:
         pass
     
@@ -162,6 +161,7 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
     calc_amplitude   = []
     calc_convergence = []
     calc_cost        = []
+    abs_signals      = []
     exp_signals      = []
     opt_signals      = []
     
@@ -190,16 +190,12 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             # create a dithering object for each fiber to speed up the computations
             dithering = {}
             for _, fiber_index in enumerate(neighbors):
-                dithering_ = Dithering.dithering(config_file="config/desi-blur-nowlenoffset-norandoffset.yaml")
-                #w_in = tabled_wlens[fiber_index]
-                #f_in = tabled_fluxes[fiber_index]
+                dithering_ = Dithering.dithering(config_file=refconfig)
                 dithering_.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[fiber_index]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
                 dithering_.desi.source.update_out()
                 source = dithering_.generate_source(disk_fraction=0., bulge_fraction=0., half_light_disk=0., half_light_bulge=0.)
                 dithering[fiber_index] = dithering_
-                #del w_in, f_in,
                 del dithering_
-            #print(dithering)
             
             # add the original fiber's data
             curr_xs = dithering_pos_xs[0][iFiber]
@@ -268,8 +264,6 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             curr_signals  = np.asarray(curr_signals).flatten()
             initial_guess = np.zeros(n_equations) if n_equations>=n_unknowns else np.zeros(n_unknowns)
 
-            #x_guess = np.sum(curr_xs * curr_signals[:len(curr_xs)])/np.sum(curr_signals)
-            #y_guess = np.sum(curr_ys * curr_signals[:len(curr_xs)])/np.sum(curr_signals)
             normalization = np.zeros(len(initial_guess))
             for idx in range(n_fibers):
                 start_ = idx*n_exposures
@@ -284,8 +278,6 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             for idx in range(n_exposures):
                 normalization[n_fibers*2+idx*n_unknown_per_exposure+0] = 0.1
                 initial_guess[n_fibers*2+idx*n_unknown_per_exposure+0] = np.random.uniform(-1, 1)     # initial guess for the seeing change for that exposure
-                #initial_guess[n_fibers*2+idx*2+0] = np.random.uniform(-0.1, 0.1)     # initial guess for the seeing change for that exposure
-                #initial_guess[n_fibers*2+idx*2+1] = np.random.uniform(-0.01, 0.01)   # initial guess for the airmass change for that exposure
 
             print("- Initial guess: \n", initial_guess[:n_unknowns]*normalization[:n_unknowns])
             print("- Signals with initial guess: \n", SOE(initial_guess, normalization)[:n_equations])
@@ -293,12 +285,8 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             
             solution = opt.root(system, initial_guess, args=(curr_signals, normalization), method='lm', \
                                 options={'factor': 100., 'ftol': 1e-7, 'eps': 1e-2, 'diag': 10*np.ones(len(initial_guess))})
-            #solution = opt.root(system, initial_guess, args=curr_signals, method='krylov', \
-            #                    options={'maxiter': 100})#, 'ftol': 1e-5, 'eps': .1, 'diag': 150*np.ones(len(initial_guess))})
             solution_msg = solution.message
             solution_ier = solution.success
-            #solution_fev = solution.nfev
-            solution     = solution
             print("- Solution: \n", solution.x[:n_unknowns]*normalization[:n_unknowns])
             print("- Calculated (optimized) measurements: \n", SOE(np.asarray(solution.x), normalization)[:n_equations])
             print("- Relative errors for exposures: \n", (100*np.fabs(SOE(np.asarray(solution.x), normalization) - curr_signals)/curr_signals)[:n_equations])
@@ -332,7 +320,7 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             
             # here we calculate the signal at the original position
             # and then move the fiber and calculate the signal at the position of optimization
-            dithering_orig = Dithering.dithering(config_file="config/desi-blur-wlenoffset-randoffset1.yaml")
+            dithering_orig = Dithering.dithering(config_file=refconfig)
             dithering_orig.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[iFiber]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
             dithering_orig.desi.source.update_out()
             dithering_orig.set_focal_position_simple(curr_focal_x, curr_focal_y)
@@ -340,14 +328,16 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
             dithering_orig.run_simulation('qso', *source, report=False, \
                                           seeing_fwhm_ref_offset=0.*u.arcsec,
                                           airmass_offset=0.)
-            print("Result at original position: ", np.median(dithering_orig.signal['b'][0]))
+            exp_signal =np.median(dithering_orig.signal['b'][0])
+            exp_signals.append(abs_signal)
+            print("Result at original position: ", exp_signal)
             dithering_orig.place_fiber([printed_offset[0], printed_offset[1]])
             dithering_orig.run_simulation('qso', *source, report=False, \
                                                        seeing_fwhm_ref_offset=solution.x[2*n_fibers]*u.arcsec,
                                                        airmass_offset=0.)
-            exp_signal = np.median(dithering_orig.signal['b'][0])
-            exp_signals.append(exp_signal)
-            print("Result at expected position: ", exp_signal)
+            abs_signal = np.median(dithering_orig.signal['b'][0])
+            abs_signals.append(abs_signal)
+            print("Result at expected position: ", abs_signal)
             dithering_orig.place_fiber([solution.x[0]*normalization[0], solution.x[1]*normalization[1]])
             dithering_orig.run_simulation('qso', *source, report=False, \
                                           seeing_fwhm_ref_offset=solution.x[2*n_fibers]*u.arcsec,
@@ -363,25 +353,26 @@ def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, s
     calc_offsets_y = np.array(calc_offsets_y)
     exp_signals    = np.array(exp_signals)
     opt_signals    = np.array(opt_signals)
+    abs_signals    = np.array(abs_signals)
     
     return input_focal_x, input_focal_y, \
         calc_offsets_x, calc_offsets_y, calc_sigma, calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost, \
-        printed_offsets_x, printed_offsets_y, exp_signals, opt_signals
+        printed_offsets_x, printed_offsets_y, abs_signals, exp_signals, opt_signals
 
 def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_idx=1, template=1, prefix=None, seeing_rms=0.00001, pattern="random"):
     # calculate the values for a combination of search radii
     focal_x, focal_y, calc_offset_x, calc_offset_y, calc_sigma, \
         calc_delta_sigma, calc_amplitude, calc_convergence, calc_cost, \
         printed_offsets_x, printed_offsets_y, \
-        exp_signals, opt_signals = run_analysis(pattern,
-                                                search_radius1,
-                                                search_radius2,
-                                                search_radius3,
-                                                start_idx=start_idx,
-                                                end_idx=end_idx,
-                                                template=template,
-                                                seeing_rms=seeing_rms,
-                                                prefix=prefix)
+        abs_signals, exp_signals, opt_signals = run_analysis(pattern,
+                                                             search_radius1,
+                                                             search_radius2,
+                                                             search_radius3,
+                                                             start_idx=start_idx,
+                                                             end_idx=end_idx,
+                                                             template=template,
+                                                             seeing_rms=seeing_rms,
+                                                             prefix=prefix)
     results_summary = {'focal_x': focal_x,
                        'focal_y': focal_y,
                        'calc_offset_x': calc_offset_x,
@@ -393,6 +384,7 @@ def run(search_radius1, search_radius2, search_radius3=None, start_idx=0, end_id
                        'calc_cost': calc_cost,
                        'printed_offset_x': printed_offsets_x,
                        'printed_offset_y': printed_offsets_y,
+                       'abs_signals': abs_signals,
                        'exp_signals': exp_signals,
                        'opt_signals': opt_signals}
     
@@ -442,11 +434,12 @@ if __name__ == "__main__":
     else:
         config_suffix += "wlenoffset-"
     if randomoffsets == 0:
-        config_suffix += "norandomoffset_"
+        config_suffix += "norandoffset"
     else:
-        config_suffix += "randoffset1_"
+        config_suffix += "randoffset1"
 
-    #config_suffix = "wlenoffset-norandomoffset{}_combined_template{}.fits".format(data_path,
+    global refconfig
+    refconfig = "config/desi-blur-{}.yaml".format(config_suffix)
     
     tabled_values = np.load(LUT_filename)
     tabled_wlens  = tabled_values["wlens"]
