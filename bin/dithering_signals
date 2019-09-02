@@ -39,12 +39,16 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     # generate the random offset but not reveal it to user until the end
     x_offset = tabled_x_offsets[source_id]
     y_offset = tabled_y_offsets[source_id]
+
+    print("Offsets are set to: ", x_offset, y_offset)
+    print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
+    
     if pos_rms > 0:
-        pos_x_err = np.random.normal(loc=0, scale=pos_rms, size=9)
-        pos_y_err = np.random.normal(loc=0, scale=pos_rms, size=9)
+        pos_x_err = np.random.normal(loc=0, scale=pos_rms, size=num_dithers)
+        pos_y_err = np.random.normal(loc=0, scale=pos_rms, size=num_dithers)
     else:
-        pos_x_err = np.zeros(9)
-        pos_y_err = np.zeros(9)
+        pos_x_err = np.zeros(num_dithers)
+        pos_y_err = np.zeros(num_dithers)
         
     dithering.set_focal_position_simple(tabled_x_pos[source_id], tabled_y_pos[source_id])
 
@@ -145,18 +149,21 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         x_pos_moves = [0, -search_radius, 0,  search_radius, -search_radius, search_radius, -search_radius, 0,   search_radius]
         y_pos_moves = [0, search_radius, search_radius, search_radius, 0,   0,  -search_radius, -search_radius, -search_radius]
     else:
-        x_pos_moves = np.random.uniform(-search_radius, search_radius, 9)
-        y_pos_moves = np.random.uniform(-search_radius, search_radius, 9)
+        x_pos_moves = np.random.uniform(-search_radius, search_radius, num_dithers)
+        y_pos_moves = np.random.uniform(-search_radius, search_radius, num_dithers)
 
     # generate the random offset but not reveal it to user until the end
     x_offset = tabled_x_offsets[source_id]
     y_offset = tabled_y_offsets[source_id]
     if pos_rms > 0:
-        pos_x_err = np.random.normal(loc=0, scale=pos_rms, size=9)
-        pos_y_err = np.random.normal(loc=0, scale=pos_rms, size=9)
+        pos_x_err = np.random.normal(loc=0, scale=pos_rms, size=num_dithers)
+        pos_y_err = np.random.normal(loc=0, scale=pos_rms, size=num_dithers)
     else:
-        pos_x_err = np.zeros(9)
-        pos_y_err = np.zeros(9)
+        pos_x_err = np.zeros(num_dithers)
+        pos_y_err = np.zeros(num_dithers)
+
+    print("Offsets are set to: ", x_offset, y_offset)
+    print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
         
     dithering.set_focal_position_simple(tabled_x_pos[source_id], tabled_y_pos[source_id])
     dithering.place_fiber([x_offset, y_offset])
@@ -195,6 +202,7 @@ parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=floa
 parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,    default=200, help="Number of fibers to simulate at once")
 parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float,  default=0.0, help="RMS of the positioner position")
 parser.add_argument("--dithering_pattern",   dest="pattern",           type=int,    default=0,   help="Dithering pattern, 0: triangular, 1: rectangular, 2: random")
+parser.add_argument("--num-dithers",         dest='num_dithers',       type=int,    default=9,  help='Number of dithering points')
 parser.add_argument("--output",              dest="outfname",          type=str,    default="results")
 parser.add_argument("--prefix",              dest="prefix",            type=str,    default="",  required=False, help="The prefix for the output directory")
 parser.add_argument("--verbose",             dest='verbose',           type=int,    default=0)
@@ -215,6 +223,7 @@ outfname          = parsed_args.outfname
 pattern           = parsed_args.pattern
 LUT_filename      = parsed_args.LUT
 prefix            = parsed_args.prefix
+num_dithers       = parsed_args.num_dithers
 
 tabled_values = np.load(LUT_filename)
 tabled_x_pos  = tabled_values['x_pos'][setid*num_sources:(setid+1)*num_sources]
@@ -223,7 +232,7 @@ tabled_x_offsets = tabled_values['x_offsets'][setid*num_sources:(setid+1)*num_so
 tabled_y_offsets = tabled_values['y_offsets'][setid*num_sources:(setid+1)*num_sources]
 tabled_wlens  = tabled_values["wlens"]
 tabled_fluxes = tabled_values["fluxes"]
-tabled_mags   = tabled_values["mags"]
+#tabled_mags   = tabled_values["mags"]
 
 num_pointings = 1
 num_total     = num_pointings * num_sources - 1
@@ -252,14 +261,14 @@ except:
 # since all the measurements of an exposure of 500 fibers would be at the same time,
 # there are only 9 offset values for each iteration of the algorithm
 if seeing_offset_rms<0.0001:
-    random_seeing_fwhm_ref_offsets = np.zeros(9)*u.arcsec
+    random_seeing_fwhm_ref_offsets = np.zeros(num_dithers)*u.arcsec
 else:
-    random_seeing_fwhm_ref_offsets = (np.random.lognormal(mean=0., sigma=seeing_offset_rms, size=9)-1.00)*u.arcsec
+    random_seeing_fwhm_ref_offsets = (np.random.lognormal(mean=0., sigma=seeing_offset_rms, size=num_dithers)-1.00)*u.arcsec
 
 if airmass_offset_rms<0.01:
-    random_airmass_offsets         = np.zeros(9)
+    random_airmass_offsets         = np.zeros(num_dithers)
 else:
-    random_airmass_offsets         = np.random.normal(0., airmass_offset_rms, 9)
+    random_airmass_offsets         = np.random.normal(0., airmass_offset_rms, num_dithers)
 
 # generate the fits file primary header
 prihdr = fits.Header()
@@ -281,7 +290,7 @@ for i in range(num_pointings):
     known_offset_y = np.zeros(num_sources)
     known_systematic_x = np.zeros(num_sources)
     known_systematic_y = np.zeros(num_sources)
-    magnitudes = np.zeros((num_sources, 5))
+    #magnitudes = np.zeros((num_sources, 5))
     calc_offset_x = np.zeros(num_sources)
     calc_offset_y = np.zeros(num_sources)
     calc_sigma_x = np.zeros(num_sources)
@@ -292,14 +301,14 @@ for i in range(num_pointings):
     calc_snr_r = np.zeros(num_sources)
     calc_snr_b = np.zeros(num_sources)
     calc_snr_z = np.zeros(num_sources)
-    dither_xs  = np.zeros((num_sources,9))
-    dither_ys  = np.zeros((num_sources,9))
-    calc_snrs_b    = np.zeros((num_sources,9))
-    calc_snrs_r    = np.zeros((num_sources,9))
-    calc_snrs_z    = np.zeros((num_sources,9))
-    calc_signals_b = np.zeros((num_sources,9))
-    calc_signals_r = np.zeros((num_sources,9))
-    calc_signals_z = np.zeros((num_sources,9))
+    dither_xs  = np.zeros((num_sources,num_dithers))
+    dither_ys  = np.zeros((num_sources,num_dithers))
+    calc_snrs_b    = np.zeros((num_sources,num_dithers))
+    calc_snrs_r    = np.zeros((num_sources,num_dithers))
+    calc_snrs_z    = np.zeros((num_sources,num_dithers))
+    calc_signals_b = np.zeros((num_sources,num_dithers))
+    calc_signals_r = np.zeros((num_sources,num_dithers))
+    calc_signals_z = np.zeros((num_sources,num_dithers))
     calc_signal_r = np.zeros(num_sources)
     calc_signal_b = np.zeros(num_sources)
     calc_signal_z = np.zeros(num_sources)
@@ -341,7 +350,7 @@ for i in range(num_pointings):
 
         w_in = tabled_wlens[j]
         f_in = tabled_fluxes[j]
-        mag  = tabled_mags[j]
+        #mag  = tabled_mags[j]
         
         dithering.desi.source.update_in("F type star", "star",
                                         w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
@@ -385,7 +394,7 @@ for i in range(num_pointings):
             known_offset_y[j] = y_offset
             known_systematic_x[j] = systematic_[0]
             known_systematic_y[j] = systematic_[1]
-            magnitudes[j] = np.array(mag)
+            #magnitudes[j] = np.array(mag)
 
             fiber_ids[j] = setid*1000 + j
             # for some reason, (i don't care for now) there is sometimes
@@ -419,7 +428,7 @@ for i in range(num_pointings):
             known_signal_z[j] = (np.median(dithering_pure.signal['z'][0]))
 
             del focal_x, focal_y, x_offset, y_offset
-            del f_in, mag
+            del f_in#, mag
             del xs, ys, SNRs, signals
             del dithering.SNR, dithering.signal
             del dithering_pure.SNR, dithering_pure.signal
@@ -467,23 +476,23 @@ for i in range(num_pointings):
          fits.Column(name="calc_snr_b",         array=calc_snr_b, format="E"),
          fits.Column(name="calc_snr_r",         array=calc_snr_r, format="E"),
          fits.Column(name="calc_snr_z",         array=calc_snr_z, format="E"),
-         fits.Column(name="calc_snrs_b",        array=calc_snrs_b,  format="9E"),
-         fits.Column(name="calc_snrs_r",        array=calc_snrs_r,  format="9E"),
-         fits.Column(name="calc_snrs_z",        array=calc_snrs_z,  format="9E"),
+         fits.Column(name="calc_snrs_b",        array=calc_snrs_b,  format="{}E".format(num_dithers)),
+         fits.Column(name="calc_snrs_r",        array=calc_snrs_r,  format="{}E".format(num_dithers)),
+         fits.Column(name="calc_snrs_z",        array=calc_snrs_z,  format="{}E".format(num_dithers)),
          fits.Column(name="known_signal_b",     array=known_signal_b, format="E"),
          fits.Column(name="known_signal_r",     array=known_signal_r, format="E"),
          fits.Column(name="known_signal_z",     array=known_signal_z, format="E"),
          fits.Column(name="calc_signal_b",      array=calc_signal_b, format="E"),
          fits.Column(name="calc_signal_r",      array=calc_signal_r, format="E"),
          fits.Column(name="calc_signal_z",      array=calc_signal_z, format="E"),
-         fits.Column(name="dither_pos_x",       array=dither_xs,  format="9E"),
-         fits.Column(name="dither_pos_y",       array=dither_ys,  format="9E"),
-         fits.Column(name="calc_signals_b",     array=calc_signals_b,  format="9E"),
-         fits.Column(name="calc_signals_r",     array=calc_signals_r,  format="9E"),
-         fits.Column(name="calc_signals_z",     array=calc_signals_z,  format="9E"),
+         fits.Column(name="dither_pos_x",       array=dither_xs,  format="{}E".format(num_dithers),
+         fits.Column(name="dither_pos_y",       array=dither_ys,  format="{}E".format(num_dithers),
+         fits.Column(name="calc_signals_b",     array=calc_signals_b,  format="{}E".format(num_dithers)),
+         fits.Column(name="calc_signals_r",     array=calc_signals_r,  format="{}E".format(num_dithers),
+         fits.Column(name="calc_signals_z",     array=calc_signals_z,  format="{}E".format(num_dithers)),
          fits.Column(name="focal_x",            array=focal_xs, format='E'),
          fits.Column(name="focal_y",            array=focal_ys, format="E"),
-         fits.Column(name="mag",                array=magnitudes, format="5E"),
+         #fits.Column(name="mag",                array=magnitudes, format="5E"),
          fits.Column(name="f_in",               array=f_ins, format="{}E".format(num_wavelengths)),
         ], header=hodor)
     hdulist.append(thdu)
