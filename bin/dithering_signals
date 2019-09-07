@@ -169,16 +169,21 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
     dithering.place_fiber([x_offset, y_offset])
     dithering.set_theta_0(-5.*u.deg)
     dithering.set_phi_0(10.*u.deg)
-    SNR    = []
-    signal = []
-    x      = []
-    y      = []
-
+    SNR      = []
+    signal   = []
+    x        = []
+    y        = []
+    fluxvars = []
     #
     # dithering starts here
     # the positioner follows a rectangular pattern around the starting point
     #
     for i in range(len(x_pos_moves)):
+        curr_fluxvar = np.random.uniform(-fluxvar, fluxvar)
+        dithering.desi.source.update_in("F type star", "star",
+                                        w_in*u.angstrom,
+                                        f_in*(1+curr_fluxvar)*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+        dithering.desi.source.update_out()
         dithering.place_fiber([x_offset+x_pos_moves[i]+pos_x_err[i], y_offset+y_pos_moves[i]+pos_y_err[i]])
         dithering.run_simulation(source_type, *source, report=False, \
                                  seeing_fwhm_ref_offset=random_seeing_offsets[i], \
@@ -187,8 +192,9 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
         x.append(x_pos_moves[i]+pos_x_err[i])
         y.append(y_pos_moves[i]+pos_y_err[i])
+        fluxvars.append(fluxvar)
         
-    return x, y, signal, SNR
+    return x, y, signal, SNR, fluxvars
 
 parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
 parser.add_argument("--config",         dest="config", default="config/desi-noblur-nooffset.yaml")
@@ -199,6 +205,7 @@ parser.add_argument("--systematic",     dest="systematicoffset", type=float, def
 parser.add_argument("--half-light-radius",   dest="half_light_radius", type=float,  default=0.5, help="Half width radius of the sources")
 parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",    type=float,  default=0.0, help="RMS of the seeing offsets")
 parser.add_argument("--airmass_offsets_rms", dest="airmass_offsets",   type=float,  default=0.0, help="RMS of the airmass offsets")
+parser.add_argument("--flux_variation",      dest="fluxvar",           type=float,  default=0.0, help="Flux variation in between dithers")
 parser.add_argument("--number_of_fibers",    dest="num_sources",       type=int,    default=200, help="Number of fibers to simulate at once")
 parser.add_argument("--positioner_rms",      dest="pos_rms",           type=float,  default=0.0, help="RMS of the positioner position")
 parser.add_argument("--dithering_pattern",   dest="pattern",           type=int,    default=0,   help="Dithering pattern, 0: triangular, 1: rectangular, 2: random")
@@ -224,6 +231,7 @@ pattern           = parsed_args.pattern
 LUT_filename      = parsed_args.LUT
 prefix            = parsed_args.prefix
 num_dithers       = parsed_args.num_dithers
+fluxvar           = parsed_args.fluxvar
 
 tabled_values = np.load(LUT_filename)
 tabled_x_pos  = tabled_values['x_pos'][setid*num_sources:(setid+1)*num_sources]
@@ -309,6 +317,7 @@ for i in range(num_pointings):
     calc_signals_b = np.zeros((num_sources,num_dithers))
     calc_signals_r = np.zeros((num_sources,num_dithers))
     calc_signals_z = np.zeros((num_sources,num_dithers))
+    fluxvariations = np.zeros((num_sources,num_dithers))
     calc_signal_r = np.zeros(num_sources)
     calc_signal_b = np.zeros(num_sources)
     calc_signal_z = np.zeros(num_sources)
@@ -348,12 +357,14 @@ for i in range(num_pointings):
             source = dithering.generate_source(disk_fraction=0., bulge_fraction=1., 
                                                half_light_disk=0., half_light_bulge=half_light_radius)
 
+        global f_in
         w_in = tabled_wlens[j]
         f_in = tabled_fluxes[j]
         #mag  = tabled_mags[j]
         
         dithering.desi.source.update_in("F type star", "star",
-                                        w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+                                        w_in*u.angstrom,
+                                        f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering.desi.source.update_out()
         dithering_pure.desi.source.update_in("F type star", "star",
                                              w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
@@ -373,17 +384,17 @@ for i in range(num_pointings):
             focal_y  = tabled_y_pos[j]
 
             if pattern == 1:
-                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j,
-                                                                   random_seeing_fwhm_ref_offsets,
-                                                                   random_airmass_offsets, pos_rms)
+                xs, ys, signals, SNRs, flxuvars = run_simulation_rectangular(dithering, source, j,
+                                                                             random_seeing_fwhm_ref_offsets,
+                                                                             random_airmass_offsets, pos_rms)
             elif pattern == 0:
-                xs, ys, signals, SNRs = run_simulation_triangulate(dithering, source, j,
-                                                                   random_seeing_fwhm_ref_offsets,
-                                                                   random_airmass_offsets, pos_rms)
+                xs, ys, signals, SNRs, fluxvars = run_simulation_triangulate(dithering, source, j,
+                                                                             random_seeing_fwhm_ref_offsets,
+                                                                             random_airmass_offsets, pos_rms)
             else:
-                xs, ys, signals, SNRs = run_simulation_rectangular(dithering, source, j,
-                                                                   random_seeing_fwhm_ref_offsets,
-                                                                   random_airmass_offsets, pos_rms, is_random=True)
+                xs, ys, signals, SNRs. fluxvars = run_simulation_rectangular(dithering, source, j,
+                                                                             random_seeing_fwhm_ref_offsets,
+                                                                             random_airmass_offsets, pos_rms, is_random=True)
 
             signals = np.asarray(signals)
             SNRs    = np.asarray(SNRs)
@@ -419,6 +430,8 @@ for i in range(num_pointings):
             calc_signal_b[j] = (np.median(dithering.signal['b'][0]))
             calc_signal_r[j] = (np.median(dithering.signal['r'][0]))
             calc_signal_z[j] = (np.median(dithering.signal['z'][0]))
+
+            fluxvariations[j] = fluxvars
             
             known_snr_b[j] = (np.median(dithering_pure.SNR['b'][0]))
             known_snr_r[j] = (np.median(dithering_pure.SNR['r'][0]))
@@ -446,15 +459,16 @@ for i in range(num_pointings):
     hodor['first_wavelength']   = w_first
     hodor['last_wavelength']    = w_last
     hodor['num_wavelengths']    = num_wavelengths
-    hodor['seeing_offset_0']    = random_seeing_fwhm_ref_offsets[0].value
-    hodor['seeing_offset_1']    = random_seeing_fwhm_ref_offsets[1].value
-    hodor['seeing_offset_2']    = random_seeing_fwhm_ref_offsets[2].value
-    hodor['seeing_offset_3']    = random_seeing_fwhm_ref_offsets[3].value
-    hodor['seeing_offset_4']    = random_seeing_fwhm_ref_offsets[4].value
-    hodor['seeing_offset_5']    = random_seeing_fwhm_ref_offsets[5].value
-    hodor['seeing_offset_6']    = random_seeing_fwhm_ref_offsets[6].value
-    hodor['seeing_offset_7']    = random_seeing_fwhm_ref_offsets[7].value
-    hodor['seeing_offset_8']    = random_seeing_fwhm_ref_offsets[8].value
+    for idither in range(num_dithers):
+        hodor['seeing_offset_{}'.format(idither)] = random_seeing_fwhm_ref_offsets[idither].value
+    #hodor['seeing_offset_1']    = random_seeing_fwhm_ref_offsets[1].value
+    #hodor['seeing_offset_2']    = random_seeing_fwhm_ref_offsets[2].value
+    #hodor['seeing_offset_3']    = random_seeing_fwhm_ref_offsets[3].value
+    #hodor['seeing_offset_4']    = random_seeing_fwhm_ref_offsets[4].value
+    #hodor['seeing_offset_5']    = random_seeing_fwhm_ref_offsets[5].value
+    #hodor['seeing_offset_6']    = random_seeing_fwhm_ref_offsets[6].value
+    #hodor['seeing_offset_7']    = random_seeing_fwhm_ref_offsets[7].value
+    #hodor['seeing_offset_8']    = random_seeing_fwhm_ref_offsets[8].value
 
     thdu = fits.BinTableHDU.from_columns(
         [fits.Column(name="fiber_ids",          array=fiber_ids, format="J"),
@@ -485,11 +499,12 @@ for i in range(num_pointings):
          fits.Column(name="calc_signal_b",      array=calc_signal_b, format="E"),
          fits.Column(name="calc_signal_r",      array=calc_signal_r, format="E"),
          fits.Column(name="calc_signal_z",      array=calc_signal_z, format="E"),
-         fits.Column(name="dither_pos_x",       array=dither_xs,  format="{}E".format(num_dithers),
-         fits.Column(name="dither_pos_y",       array=dither_ys,  format="{}E".format(num_dithers),
+         fits.Column(name="dither_pos_x",       array=dither_xs,  format="{}E".format(num_dithers)),
+         fits.Column(name="dither_pos_y",       array=dither_ys,  format="{}E".format(num_dithers)),
          fits.Column(name="calc_signals_b",     array=calc_signals_b,  format="{}E".format(num_dithers)),
-         fits.Column(name="calc_signals_r",     array=calc_signals_r,  format="{}E".format(num_dithers),
+         fits.Column(name="calc_signals_r",     array=calc_signals_r,  format="{}E".format(num_dithers)),
          fits.Column(name="calc_signals_z",     array=calc_signals_z,  format="{}E".format(num_dithers)),
+         fits.Column(name="fluxvariations",     array=fluxvariations,  format="{}E".format(num_dithers)),
          fits.Column(name="focal_x",            array=focal_xs, format='E'),
          fits.Column(name="focal_y",            array=focal_ys, format="E"),
          #fits.Column(name="mag",                array=magnitudes, format="5E"),
