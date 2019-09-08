@@ -192,7 +192,7 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         signal.append([np.median(dithering.signal['b'][0]), np.median(dithering.signal['r'][0]), np.median(dithering.signal['z'][0])])
         x.append(x_pos_moves[i]+pos_x_err[i])
         y.append(y_pos_moves[i]+pos_y_err[i])
-        fluxvars.append(fluxvar)
+        fluxvars.append(curr_fluxvar)
         
     return x, y, signal, SNR, fluxvars
 
@@ -377,7 +377,7 @@ for i in range(num_pointings):
                                       seeing_fwhm_ref_offset=1e-12*u.arcsec, airmass_offset=1e-12)
 
         
-        try:
+        if True:
             x_offset = tabled_x_offsets[j]
             y_offset = tabled_y_offsets[j]
             focal_x  = tabled_x_pos[j]
@@ -392,7 +392,7 @@ for i in range(num_pointings):
                                                                              random_seeing_fwhm_ref_offsets,
                                                                              random_airmass_offsets, pos_rms)
             else:
-                xs, ys, signals, SNRs. fluxvars = run_simulation_rectangular(dithering, source, j,
+                xs, ys, signals, SNRs, fluxvars = run_simulation_rectangular(dithering, source, j,
                                                                              random_seeing_fwhm_ref_offsets,
                                                                              random_airmass_offsets, pos_rms, is_random=True)
 
@@ -407,7 +407,7 @@ for i in range(num_pointings):
             known_systematic_y[j] = systematic_[1]
             #magnitudes[j] = np.array(mag)
 
-            fiber_ids[j] = setid*1000 + j
+            fiber_ids[j] = setid*num_sources + j
             # for some reason, (i don't care for now) there is sometimes
             # error with the size of the array. TODO: Take a look at this later.
             try:
@@ -446,7 +446,7 @@ for i in range(num_pointings):
             del dithering.SNR, dithering.signal
             del dithering_pure.SNR, dithering_pure.signal
             
-        except:
+        else:
             if parsed_args.verbose:
                 print("problem with the current fiber dithering {}... moving to the next one...".format(j))
             continue
