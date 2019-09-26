@@ -1,0 +1,523 @@
+#!/bin/python
+
+import astropy.units as u
+import numpy as np
+import yaml
+import random
+import math
+import sys
+import os
+import pickle
+
+import scipy.optimize as opt
+import matplotlib.pyplot as plt
+
+from astropy.io import fits
+from astropy import table
+
+from desidithering import dithering as Dithering
+from desidithering import fiber_selector as Selector
+import argparse
+import time
+
+from sklearn.neighbors import KDTree
+import specsim
+
+import dithering_print_offsets
+
+import desimodel.focalplane.geometry as fgeom
+
+tbl = fgeom.load_deviceloc()
+x_tbl = tbl['X']; y_tbl = tbl['Y']; petal_tbl = tbl['PETAL']
+geom_tree = KDTree(list(zip(x_tbl,y_tbl)), leaf_size=4)
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+is_plot = False
+debug   = False
+
+def rotation_angle_calculator(A, B):
+    r = 300.
+    dr = offset_due_to_field_rotation(A, B, r)
+    rot_angle = np.arctan2(dr, r*1e3) * 180. / np.pi
+    return rot_angle
+
+def offset_due_to_field_rotation(A, B, r):
+    return A*r + B
+
+# this function yields the residual for the number of equations
+def system(x, b, norms, stage):
+    n_unknowns_ = len(x)
+    random_indices = random.sample(list(np.arange(0, n_equations)), n_unknowns_)
+    #print(len(x), len(b[random_indices]), len(norms), stage, len(random_indices))
+    return (SOE(x, norms, random_indices, stage) - b[random_indices])
+
+def SOE(par, norms, indices, stage=1):
+    start_time = time.time()
+    x = par * norms
+    n_unknowns_ = len(x)
+    calculated_integrals = np.zeros(n_unknowns_)
+
+    if debug:
+        print("[DEBUG] ", indices)
+    
+    for i, idx in enumerate(indices):
+        curr_fiber_idx_ = int(idx/n_exposures)
+        curr_seeing_idx_= idx%n_exposures
+        if debug:
+            print("[DEBUG] {} -> fiber idx: {}; seeing_idx: {}".format(idx, curr_fiber_idx_, curr_seeing_idx_))
+        curr_focal_x_   = curr_focal_xs[curr_fiber_idx_]
+        curr_focal_y_   = curr_focal_ys[curr_fiber_idx_]
+        devices, distances = geom_tree.query_radius(np.asarray([curr_focal_x_, curr_focal_y_]).reshape(1,2),
+                                                    r=8, sort_results=True, return_distance=True)
+        if debug:
+            print("[DEBUG]    -> focal coordinates: {}, {}".format(curr_focal_x_, curr_focal_y_))
+        curr_angle_     = np.arctan2(curr_focal_y_, curr_focal_x_)
+        curr_focal_r_   = np.sqrt(curr_focal_x_**2 + curr_focal_y_**2)
+        curr_x_pos_     = curr_xs[idx]; curr_y_pos_ = curr_ys[idx]
+        offsets_        = x[0] * curr_focal_r_ + x[1]
+        if debug:
+            print("[DEBUG]    -> offset: {}".format(offsets_))
+        if stage == 1:
+            offset_x_       = -offsets_ * np.sin(curr_angle_) * u.micron
+            offset_y_       =  offsets_ * np.cos(curr_angle_) * u.micron
+            offset_x_mm_    = offset_x_.to(u.mm).value
+            offset_y_mm_    = offset_y_.to(u.mm).value
+        elif stage == 2:
+            curr_petal_     = petal_tbl[devices[0][0]]
+            petal_offset_x_ = x[2+n_exposures+2*curr_petal_]
+            petal_offset_y_ = x[2+n_exposures+2*curr_petal_+1]
+            if debug:
+                print("[DEBUG]    -> offset: {}".format([petal_offset_x_, petal_offset_y_]))
+            offset_x_       = -offsets_ * np.sin(curr_angle_) * u.micron + petal_offset_x_ * u.micron
+            offset_y_       =  offsets_ * np.cos(curr_angle_) * u.micron + petal_offset_y_ * u.micron
+            offset_x_mm_    = offset_x_.to(u.mm).value
+            offset_y_mm_    = offset_y_.to(u.mm).value
+        if debug:
+            print("[DEBUG]    -> curr positioner: ({},{}) ".format(curr_x_pos_, curr_y_pos_))
+        if (x[2+curr_seeing_idx_] <= 0.1) or (x[2+curr_seeing_idx_]>=-0.1):
+            dithering[neighbors[curr_fiber_idx_]].set_focal_position_simple(curr_focal_x_,
+                                                                            curr_focal_y_)
+            dithering[neighbors[curr_fiber_idx_]].place_fiber([curr_x_pos_+offset_x_.value, curr_y_pos_+offset_y_.value])
+            dithering[neighbors[curr_fiber_idx_]].run_simulation('qso', *source, report=False, \
+                                                                 seeing_fwhm_ref_offset=x[2+curr_seeing_idx_]*u.arcsec,
+                                                                 airmass_offset=1e-12)
+            calculated_integrals[i] = np.median(dithering[neighbors[curr_fiber_idx_]].signal['b'][0])/max_signal
+        else:
+            calculated_integrals[i] = 1e25
+    return calculated_integrals
+    
+def run_analysis(pattern, search_radius1, search_radius2, search_radius3=None, template=1, seeing_rms=0.00001, prefix=None):
+
+    global dithering
+    global source
+    global curr_xs, curr_ys, curr_focal_xs, curr_focal_ys, curr_signals
+    global neighbors, n_fibers, n_exposures
+    global n_equations, n_unknowns, n_unknown_per_exposure
+    global seeing, airmass
+    
+    data_path = prefix
+
+    filenames = []
+    # two files to be combine by default
+    # in case a third search radius is defined, add it to the list as well    
+    config_suffix = template_cfg.split("blur-")[-1].split(".yaml")[0]
+    template = config_suffix[-1]
+    try:
+        template = int(template)
+    except:
+        template = 6
+        
+    filenames.append("{}/{:.1f}um/result_{}_dithers{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                                        search_radius1,
+                                                                                                        pattern,
+                                                                                                        num_dithers,
+                                                                                                        seeing_rms,
+                                                                                                        config_suffix,
+                                                                                                        template))
+    # add the second file for the second dithering search radius if provided
+    try:
+        filenames.append("{}/{:.1f}um/result_{}_dithers{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                                            search_radius2,
+                                                                                                            pattern,
+                                                                                                            num_dithers,
+                                                                                                            seeing_rms,
+                                                                                                            config_suffix,
+                                                                                                            template))
+    except:
+        pass
+    # add the third file for the third dithering search radius if provided
+    try:
+        filenames.append("{}/{:.1f}um/result_{}_dithers{}_seeing{}_blur_{}_combined_template{}.fits".format(data_path,
+                                                                                                            search_radius3,
+                                                                                                            pattern,
+                                                                                                            num_dithers,
+                                                                                                            seeing_rms,
+                                                                                                            config_suffix,
+                                                                                                            template))
+    except:
+        pass
+    
+    print(" WILL PROCESS THE FOLLOWING FILES FOR OPTIMIZATION \n", filenames)
+    
+    dithering_pos_xs = []
+    dithering_pos_ys = []
+    fiber_ids    = []
+    calc_signals = []
+    focal_xs     = []
+    focal_ys     = []
+    offset_xs    = []
+    offset_ys    = []
+    
+    ## THIS PART IS PROBABLY NOT NEEDED
+    ## CHECK BACK AGAIN
+    # tables corresponding to the files
+    for filename in filenames:
+        hdus = fits.open(filename)
+        dithering_pos_xs.append(hdus[1].data['dither_pos_x'])
+        dithering_pos_ys.append(hdus[1].data['dither_pos_y'])
+        fiber_ids.append(hdus[1].data['fiber_ids'])
+        calc_signals.append(hdus[1].data['calc_signals_b'])
+        focal_xs.append(hdus[1].data['focal_x'])
+        focal_ys.append(hdus[1].data['focal_y'])
+        offset_xs.append(hdus[1].data['known_offset_x'])
+        offset_ys.append(hdus[1].data['known_offset_y'])
+        del hdus
+
+    hdus = fits.open(filenames[0])
+    f_ins   = hdus[1].data['f_in']
+    w_first = 3500.0
+    w_last  = 10000.0
+    w_len   = len(f_ins[0])
+    w_in    = np.linspace(w_first, w_last, w_len)
+
+    focal_coordinates = np.vstack((focal_xs[0], focal_ys[0])).T
+    tree = KDTree(focal_coordinates, leaf_size=4)
+        
+    input_focal_x    = []
+    input_focal_y    = []
+    printed_offsets_x= []
+    printed_offsets_y= []
+    calc_offsets_x   = []
+    calc_offsets_y   = []
+    calc_sigma       = []
+    calc_delta_sigma = []
+    calc_amplitude   = []
+    calc_convergence = []
+    calc_cost        = []
+    abs_signals      = []
+    exp_signals      = []
+    opt_signals      = []
+
+    selector = Selector.fiber_selector(LUT_filename)
+    selected_fibers = selector.get_random_fibers(fiber_per_petal)
+
+    selected_fibers = selected_fibers[selected_fibers<900] # temp fix
+    
+    neighbors = selected_fibers # this is done just as a placeholder. it will be changed later after the code verification.
+
+    n_fibers    = len(neighbors)
+    n_exposures = np.asarray(dithering_pos_xs).shape[2] * np.asarray(dithering_pos_xs).shape[0]
+    n_petals    = 10
+
+    print("- Number of exposures: {}".format(n_exposures))
+    print("- Number of neighbors: {}".format(len(neighbors)))
+    print("-- Neighbors:          ", neighbors)
+
+    #if verbose:
+    print("Constructed simulator objects for fibers")
+
+    curr_xs = np.zeros(0)
+    curr_ys = np.zeros(0)
+    curr_signals = np.zeros(0)
+    curr_focal_xs = []
+    curr_focal_ys = []
+
+    for _, fiber_index in enumerate(selected_fibers):
+        curr_xs      = np.concatenate((curr_xs, dithering_pos_xs[0][fiber_index]), axis=None)
+        curr_ys      = np.concatenate((curr_ys, dithering_pos_ys[0][fiber_index]), axis=None)
+        curr_signals = np.concatenate((curr_signals, calc_signals[0][fiber_index]), axis=None)
+        curr_focal_x = focal_xs[0][fiber_index]
+        curr_focal_y = focal_ys[0][fiber_index]
+        curr_focal_xs.append(curr_focal_x)
+        curr_focal_ys.append(curr_focal_y)
+        
+        for iSet, _ in enumerate(dithering_pos_xs):
+            if iSet == 0:
+                continue
+            focal_x_indices = (focal_xs[iSet] == curr_focal_x)
+            focal_y_indices = (focal_ys[iSet] == curr_focal_y)
+            index        = np.logical_and(focal_x_indices, focal_y_indices)
+            ifiber_match = np.where(index)[0]
+            # just a sanity check
+            if ( (curr_focal_x == focal_xs[iSet][ifiber_match]) and (curr_focal_y == focal_ys[iSet][ifiber_match]) ):
+                curr_xs = np.concatenate((curr_xs, dithering_pos_xs[iSet][ifiber_match]), axis=None)
+                curr_ys = np.concatenate((curr_ys, dithering_pos_ys[iSet][ifiber_match]), axis=None)
+                curr_signals = np.concatenate((curr_signals, calc_signals[iSet][ifiber_match]), axis=None)
+            else:
+                print("failed the sanity check")
+
+    n_equations = len(curr_xs)
+    n_unknown_per_exposure = 1 # 1: only seeing offset, 2: seeing and airmass offsets
+    n_unknowns = 2 + n_unknown_per_exposure*n_exposures + 2*n_petals
+            
+    print("- Number of fibers:    {}".format(n_fibers))
+    print("- Number of exposures: {}".format(n_exposures))
+    print("- Number of unknowns:  {}".format(n_unknowns))
+    print("- Number of equations: {}".format(n_equations))
+
+    curr_xs = np.asarray(curr_xs).flatten()
+    curr_ys = np.asarray(curr_ys).flatten()
+    estimated_offsets = np.zeros((2,len(curr_xs)))
+    for idx, _ in enumerate(curr_xs):
+        poffset    = offset_due_to_field_rotation(0.15, 0.00, np.sqrt(curr_xs[idx]**2+curr_ys[idx]**2))
+        pangle     = np.arctan2(curr_ys[idx], curr_xs[idx])
+        estimated_offsets[0, idx] = -poffset * np.sin(pangle)
+        estimated_offsets[1, idx] =  poffset * np.cos(pangle)
+        
+    curr_signals  = np.asarray(curr_signals).flatten()
+    initial_guess = np.zeros(n_unknowns)
+
+    normalization = np.zeros(len(initial_guess))
+    normalization[0] = 0.15
+    initial_guess[0] = 1.
+    normalization[1] = 0.1
+    initial_guess[1] = 1.
+    for i in range(n_exposures):
+        normalization[2+i] = 0.1
+        initial_guess[2+i] = np.random.uniform(-1., 1.)
+    for ipetal in range(n_petals):
+        normalization[2+n_exposures+ipetal*2] = 20.
+        initial_guess[2+n_exposures+ipetal*2] = np.sum((curr_xs[ipetal*n_exposures:(ipetal+1)*n_exposures] - \
+                                                        estimated_offsets[0, ipetal*n_exposures:(ipetal+1)*n_exposures]) * \
+                                                       curr_signals[ipetal*n_exposures:(ipetal+1)*n_exposures])/ \
+                                                       np.sum(curr_signals[ipetal*n_exposures:(ipetal+1)*n_exposures])/20.
+        normalization[2+n_exposures+ipetal*2+1] = 20.
+        initial_guess[2+n_exposures+ipetal*2+1] = np.sum((curr_ys[ipetal*n_exposures:(ipetal+1)*n_exposures] - \
+                                                          estimated_offsets[1,ipetal*n_exposures:(ipetal+1)*n_exposures]) * \
+                                                         curr_signals[ipetal*n_exposures:(ipetal+1)*n_exposures]) / \
+                                                         np.sum(curr_signals[ipetal*n_exposures:(ipetal+1)*n_exposures])/20.
+
+    # contruct the simulator objects
+    dithering = {}
+    for _, fiber_index in enumerate(selected_fibers):
+        dithering_ = Dithering.dithering(config_file=reference_cfg)
+        dithering_.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[fiber_index]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+        dithering_.desi.source.update_out()
+        source = dithering_.generate_source(disk_fraction=0., bulge_fraction=0., half_light_disk=0., half_light_bulge=0.)
+        dithering[fiber_index] = dithering_
+        print(" - Object for {} is constructed".format(fiber_index))
+        del dithering_
+        
+    global max_signal
+    max_signal = curr_signals.max()
+    curr_signals /= max_signal
+    random_indices = random.sample(list(np.arange(0, n_equations)), n_unknowns)
+
+    print("- Initial guess: \n", (initial_guess*normalization))
+    if False:
+        # We start with assuming only field rotation
+        solution = opt.root(system, initial_guess[:2+n_exposures], args=(curr_signals, normalization[:2+n_exposures], 1), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-1, 'diag': 100*np.ones(len(initial_guess[:2+n_exposures]))})
+        print(" - Step 1 complete")
+        print(" - Current solution")
+        print("   rotation angle = {:.2f}".format(rotation_angle_calculator(solution.x[0]*normalization[0], solution.x[1]*normalization[1])))
+        print("   seeing changes = {}".format(solution.x[2:2+n_exposures]*normalization[2:2+n_exposures]))
+        print(" - I will try to improve the results further")
+        solution = opt.root(system, solution.x[:2+n_exposures], args=(curr_signals, normalization[:2+n_exposures], 1), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-2, 'diag': 10*np.ones(len(solution.x[:2+n_exposures]))})
+        print(" - Step 2 complete")
+        print(" - Current solution is: {}, {}".format(solution.x[0]*normalization[0], solution.x[1]*normalization[1]))
+        print(" - I will try to add the second possible field, petal dependant offsets")
+    else:
+        solution = opt.root(system, initial_guess, args=(curr_signals, normalization, 2), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-1, 'diag': 100*np.ones(len(initial_guess))})
+        print(" - Step 1 complete")
+        print(" - Current solution")
+        print("   rotation angle = {:.4f}".format(rotation_angle_calculator(solution.x[0]*normalization[0], solution.x[1]*normalization[1])))
+        print("   seeing changes = {}".format(solution.x[2:2+n_exposures]*normalization[2:2+n_exposures]))
+        print(" - I will try to improve the results further")
+        solution = opt.root(system, solution.x, args=(curr_signals, normalization, 2), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-2, 'diag': 10*np.ones(len(solution.x))})
+        print(" - Step 2 complete")
+        print(" - Current solution is: {}, {}".format(solution.x[0]*normalization[0], solution.x[1]*normalization[1]))
+        print(" - I will try to add the second possible field, petal dependant offsets")
+    try:
+        solution = opt.root(system, np.concatenate((solution.x, initial_guess[2+n_exposures:]), axis=None),
+                            args=(curr_signals, normalization, 1), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-2, 'diag': 10*np.ones(len(normalization))})
+    except:
+        solution = opt.root(system, solution.x, \
+                            args=(curr_signals, normalization, 1), method='lm', \
+                            options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-2, 'diag': 10*np.ones(len(normalization))})
+    print(" - Step 3 complete")
+    print(" - I will try to improve the results further")
+    solution = opt.root(system, solution.x, args=(curr_signals, normalization, 2), method='lm', \
+                        options={'factor': 100., 'ftol': 1e-15, 'xtol': 1e-15, 'eps': 1e-2, 'diag': 10*np.ones(len(solution.x))})
+    solution_msg = solution.message
+    solution_ier = solution.success
+    print(" - Step 4 complete")
+    #print(" - Current solution is: {}, {}".format(solution.x[0]*normalization[0], solution.x[1]*normalization[1]))
+    print(" - Final Solution: \n", solution.x*normalization)
+    random_indices = random.sample(list(np.arange(0, n_equations)), n_unknowns)
+    print(" - Calculated (optimized) measurements: \n", SOE(np.asarray(solution.x), normalization, random_indices), 1)
+    print(" - Relative errors for exposures: \n", (100*np.fabs(SOE(np.asarray(solution.x), normalization, random_indices, 1) - \
+                                                               curr_signals[random_indices])/curr_signals[random_indices])[:n_equations])
+    # some diagnostics here
+    iFiber = selected_fibers[0]
+    printed_offset = [ offset_xs[0][iFiber], offset_ys[0][iFiber] ]
+    print("Solver message: ", solution_msg)
+    print("Convergence   : ", solution_ier)
+    try:
+        print("Num of F ev   : ", solution_fev)
+    except:
+        pass
+
+    curr_focal_x_   = focal_xs[0][0]
+    curr_focal_y_   = focal_ys[0][0]
+    curr_angle_     = np.arctan2(curr_focal_y_, curr_focal_x_)
+    curr_focal_r_   = np.sqrt(curr_focal_x_**2 + curr_focal_y_**2)
+    offsets_        = solution.x[0]*normalization[0] * curr_focal_r_ + solution.x[1]*normalization[1]
+    offset_x_       = -offsets_ * np.sin(curr_angle_) * u.micron
+    offset_y_       =  offsets_ * np.cos(curr_angle_) * u.micron
+    devices, distances = geom_tree.query_radius(np.asarray([curr_focal_x_, curr_focal_y_]).reshape(1,2),
+                                                r=8, sort_results=True, return_distance=True)
+    curr_petal_     = petal_tbl[devices[0][0]]
+    petal_offset_x_ = solution.x[2+n_exposures+curr_petal_*2]*normalization[2+n_exposures+curr_petal_*2] * u.micron
+    petal_offset_y_ = solution.x[2+n_exposures+curr_petal_*2+1]*normalization[2+n_exposures+curr_petal_*2+1] * u.micron
+
+    field_rotation  = rotation_angle_calculator(solution.x[0]*normalization[0], solution.x[1]*normalization[1])
+    petal_offsets_x = solution.x[2+n_exposures::2]*normalization[2+n_exposures::2]
+    petal_offsets_y = solution.x[2+n_exposures+1::2]*normalization[2+n_exposures+1::2]
+    delta_seeing    = solution.x[2:2+n_exposures]*normalization[2:2+n_exposures]
+    
+    print("Printed offset: ", printed_offset[0], printed_offset[1])
+    print("Solution      : x={:.2f}+{:.2f}={:.2f} micron y={:.2f}+{:.2f}={:.2f} micron".format(offset_x_.value, petal_offset_x_.value,
+                                                                                               offset_x_.value+petal_offset_x_.value,
+                                                                                               offset_y_.value, petal_offset_y_.value,
+                                                                                               offset_y_.value+petal_offset_y_.value))
+    print(" - Field rotation: {}".format(field_rotation))
+    print(" - Petal offsets:  {}".format(list(zip(petal_offsets_x, petal_offsets_y))))
+    print(" - Delta(seeing):  {}".format(delta_seeing))
+    
+    input_focal_x.append(curr_focal_x)
+    input_focal_y.append(curr_focal_y)
+    printed_offsets_x.append(printed_offset[0])
+    printed_offsets_y.append(printed_offset[1])
+    calc_x_offset = solution.x[0]
+    calc_y_offset = solution.x[1]
+    calc_offsets_x.append(calc_x_offset)
+    calc_offsets_y.append(calc_y_offset)
+    calc_convergence.append(solution.success)
+    calc_cost.append(None)    
+    
+    print("- Focal coordinates: {:.2f}, {:.2f}".format(curr_focal_x, curr_focal_y))
+    
+    # here we calculate the signal at the original position
+    # and then move the fiber and calculate the signal at the position of optimization
+    dithering_orig = Dithering.dithering(config_file=reference_cfg)
+    dithering_orig.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[iFiber]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+    dithering_orig.desi.source.update_out()
+    dithering_orig.set_focal_position_simple(curr_focal_x, curr_focal_y)
+    dithering_orig.place_fiber([0., 0.])
+    dithering_orig.run_simulation('qso', *source, report=False, \
+                                  seeing_fwhm_ref_offset=0.*u.arcsec,
+                                  airmass_offset=0.)
+    exp_signal = np.median(dithering_orig.signal['b'][0])
+    exp_signals.append(exp_signal)
+    print("Result at original position: ", exp_signal)
+    del dithering_orig
+    dithering_orig = Dithering.dithering(config_file=template_cfg)
+    dithering_orig.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[iFiber]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+    dithering_orig.desi.source.update_out()
+    dithering_orig.set_focal_position_simple(curr_focal_x, curr_focal_y)
+    dithering_orig.place_fiber([0., 0.])
+    dithering_orig.run_simulation('qso', *source, report=False, \
+                                  seeing_fwhm_ref_offset=0*u.arcsec,
+                                  airmass_offset=0.)
+    abs_signal = np.median(dithering_orig.signal['b'][0])
+    abs_signals.append(abs_signal)
+    print("Result at expected position: ", abs_signal)
+    dithering_orig.place_fiber([printed_offset[0], printed_offset[1]])
+    dithering_orig.run_simulation('qso', *source, report=False, \
+                                  seeing_fwhm_ref_offset=0*u.arcsec,
+                                  airmass_offset=0.)
+    printed_signal = np.median(dithering_orig.signal['b'][0])
+    print("Result at printed position: ", printed_signal)
+    dithering_orig.place_fiber([printed_offset[0]-(offset_x_+petal_offset_x_).value,
+                                printed_offset[1]-(offset_y_+petal_offset_y_).value])
+    dithering_orig.run_simulation('qso', *source, report=False, \
+                                  seeing_fwhm_ref_offset=0*u.arcsec,
+                                  airmass_offset=0.)
+    opt_signal = np.median(dithering_orig.signal['b'][0])
+    opt_signals.append(opt_signal)
+    print("Result at calculated position: ", opt_signal)
+            
+    return selected_fibers, field_rotation, petal_offsets_x, petal_offsets_y
+
+def run(search_radius1, search_radius2, search_radius3=None, template=1, prefix=None, seeing_rms=0.00001, pattern="random"):
+    # calculate the values for a combination of search radii
+    selected_indices, field_rotation, petal_offsets_x, petal_offsets_y = run_analysis(pattern,
+                                                                                      search_radius1,
+                                                                                      search_radius2,
+                                                                                      search_radius3,
+                                                                                      template=template,
+                                                                                      seeing_rms=seeing_rms,
+                                                                                      prefix=prefix)
+    results_summary = {'selected_indices': selected_indices,
+                       'field_rotation': field_rotation,
+                       'petal_offsets_x': petal_offsets_x,
+                       'petal_offsets_y': petal_offsets_y}
+    
+    pickle.dump(results_summary, open("results_{}_{}_summary.pkl".format(search_radius1, search_radius2), "wb"))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script to find the optimal focal point given a set of parameters")
+    parser.add_argument("--step-size",      dest="stepsize",              type=float,  required=True, \
+                        help="Step size for the optimization algorithm", nargs="+")
+    parser.add_argument("--lookupTable",    dest="LUT",                   type=str,    required=True, \
+                        help="The table file to run the analysis")
+    parser.add_argument("--seeing_offsets_rms",  dest="seeing_offsets",   type=str,  default=0.0, \
+                        help="RMS of the seeing offsets")
+    parser.add_argument("--dithering_pattern",   dest="pattern",          type=int,    default=0,\
+                        help="Dithering pattern, 0: triangular, 1: rectangular, 2: random")
+    parser.add_argument("--fiber_per_petal",     dest="per_petal",        type=int,    default=3)
+    parser.add_argument("--output",              dest="outfname",         type=str,    default="results")
+    parser.add_argument("--prefix",              dest="prefix",           type=str,    default="",  required=False,\
+                        help="The prefix for the output directory")
+    parser.add_argument("--template_config",     dest="template_config",  type=str,    required=True)
+    parser.add_argument("--num-dithers",         dest="num_dithers",      type=int,   required=True)
+    parser.add_argument("--reference_config",    dest="reference_config", type=str,   required=True)
+    parser.add_argument("--verbose",             dest='verbose',          type=int,    default=0)
+    parsed_args = parser.parse_args()
+
+    global config_suffix
+    global reference_cfg, template_cfg
+    global num_dithers
+    global LUT_filename
+    global fiber_per_petal
+    
+    config_file          = "config/desi-blur-nowlenoffset-norandoffset.yaml"
+    search_radius        = parsed_args.stepsize
+    seeing_rms           = parsed_args.seeing_offsets
+    outfname             = parsed_args.outfname
+    pattern              = parsed_args.pattern
+    LUT_filename         = parsed_args.LUT
+    prefix               = parsed_args.prefix
+    template_cfg         = parsed_args.template_config
+    reference_cfg        = parsed_args.reference_config
+    num_dithers          = parsed_args.num_dithers
+    fiber_per_petal      = parsed_args.per_petal
+    
+    tabled_values = np.load(LUT_filename)
+    tabled_wlens  = tabled_values["wlens"]
+    tabled_fluxes = tabled_values["fluxes"]
+    tabled_x_offsets = tabled_values['x_offsets']
+    tabled_y_offsets = tabled_values['y_offsets']
+    tabled_x_pos = tabled_values['x_pos']
+    tabled_y_pos = tabled_values['y_pos']
+
+    stepsize = [None, None, None]
+    for i, _ in enumerate(search_radius):
+        stepsize[i] = search_radius[i]
+    run(*stepsize, template=1, prefix=prefix, seeing_rms=seeing_rms)
