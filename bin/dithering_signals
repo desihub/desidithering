@@ -370,14 +370,13 @@ for i in range(num_pointings):
                                              w_in*u.angstrom, f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
         dithering_pure.desi.source.update_out()
         
-        dithering_pure.set_focal_position_simple(tabled_x_pos[j], tabled_y_pos[j])
-        dithering_pure.set_theta_0(-5.*u.deg)
-        dithering_pure.set_phi_0(10.*u.deg)
-        dithering_pure.run_simulation(source_type, *source, report=False, \
-                                      seeing_fwhm_ref_offset=1e-12*u.arcsec, airmass_offset=1e-12)
-
-        
         try:
+            dithering_pure.set_focal_position_simple(tabled_x_pos[j], tabled_y_pos[j])
+            dithering_pure.set_theta_0(-5.*u.deg)
+            dithering_pure.set_phi_0(10.*u.deg)
+            dithering_pure.run_simulation(source_type, *source, report=False, \
+                                          seeing_fwhm_ref_offset=1e-12*u.arcsec, airmass_offset=1e-12)
+
             x_offset = tabled_x_offsets[j]
             y_offset = tabled_y_offsets[j]
             focal_x  = tabled_x_pos[j]
