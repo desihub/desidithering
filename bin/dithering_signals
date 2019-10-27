@@ -171,8 +171,8 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         x_pos_moves = [0, -search_radius, 0,  search_radius, -search_radius, search_radius, -search_radius, 0,   search_radius]
         y_pos_moves = [0, search_radius, search_radius, search_radius, 0,   0,  -search_radius, -search_radius, -search_radius]
     else:
-        x_pos_moves = np.random.uniform(-search_radius, search_radius, num_dithers)
-        y_pos_moves = np.random.uniform(-search_radius, search_radius, num_dithers)
+        x_pos_moves = np.concatenate( (np.asarray([0]), np.random.uniform(-search_radius, search_radius, num_dithers-1)) )
+        y_pos_moves = np.concatenate( (np.asarray([0]), np.random.uniform(-search_radius, search_radius, num_dithers-1)) )
 
     # generate the random offset but not reveal it to user until the end
     x_offset = tabled_x_offsets[source_id]
@@ -260,7 +260,7 @@ prefix            = parsed_args.prefix
 num_dithers       = parsed_args.num_dithers
 fluxvar           = parsed_args.fluxvar
 
-tabled_values = np.load(LUT_filename)
+tabled_values = np.load(LUT_filename, allow_pickle=True)
 tabled_x_pos  = tabled_values['x_pos'][setid*num_sources:(setid+1)*num_sources]
 tabled_y_pos  = tabled_values['y_pos'][setid*num_sources:(setid+1)*num_sources]
 tabled_x_offsets = tabled_values['x_offsets'][setid*num_sources:(setid+1)*num_sources]
@@ -299,8 +299,8 @@ if seeing_offset_rms<0.0001:
     random_seeing_fwhm_ref_offsets = np.zeros(num_dithers)*u.arcsec
 else:
     # TOLGA CHANGE HERE
-    random_seeing_fwhm_ref_offsets = tabled_values[seeing_offset_rms]#(np.random.lognormal(mean=0., sigma=seeing_offset_rms, size=num_dithers)-1.00)*u.arcsec
-
+    random_seeing_fwhm_ref_offsets = tabled_values['seeing_changes'][()][seeing_offset_rms]
+          
 if airmass_offset_rms<0.01:
     random_airmass_offsets         = np.zeros(num_dithers)
 else:
@@ -393,7 +393,7 @@ for i in range(num_pointings):
         f_in = tabled_fluxes[j]
         #mag  = tabled_mags[j]
 
-        f_in[f_in==0] = 1e-12
+        #f_in[f_in==0] = 1e-12
         dithering.desi.source.update_in("F type star", "star",
                                         w_in*u.angstrom,
                                         f_in*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
