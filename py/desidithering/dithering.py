@@ -288,14 +288,18 @@ class dithering:
         self.get_fiber_acceptance_fraction(source_type, source_fraction, source_half_light_radius, source_minor_major_axis_ratio, source_position_angle)
         start_time = time.time()
         self.desi.simulate(fiber_acceptance_fraction=self.fiber_acceptance_fraction)
+        self.desi.generate_random_noise()
         self.SNR = {}
         self.signal = {}
+        self.signal_noise = {}
         start_time = time.time()
         for output in self.desi.camera_output:
             snr = (output['num_source_electrons'][:, 0])/np.sqrt(output['variance_electrons'][:, 0])
-            signal = (output['num_source_electrons'][:, 0])
+            signal = (output['num_source_electrons'][:, 0]*output['flux_calibration'][:, 0])
+            signal_noise = (output['num_source_electrons'][:, 0]*output['flux_calibration'][:, 0]*output['random_noise_electrons'][:, 0])
             self.SNR[output.meta['name']] = [snr, output.meta['pixel_size']]
             self.signal[output.meta['name']] = [signal, output.meta['pixel_size']]
+            self.signal_noise[output.meta['name']] = [signal_noise, output.meta['pixel_size']]
         if report:
             self.report(simple=False)
         
