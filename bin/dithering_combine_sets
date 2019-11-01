@@ -19,6 +19,8 @@ parser.add_argument('-t', '--template',
 parser.add_argument('-a', '--pattern',
                     required=False,
                     default='triangle')
+parser.add_argument('-d', '--dithers',
+                    default=10)
 parsed_args = parser.parse_args()
 
 folder_list  = glob.glob("{}/*um".format(parsed_args.prefix))
@@ -26,10 +28,10 @@ search_radii = [folder_name.split("um")[0] for folder_name in folder_list] # not
 
 for folder in folder_list:
     print("running for folder {}".format(folder))
-    files = glob.glob("{}/result_{}_seeing{}_*-randoffset{}_*_template{}.fits".format(folder, parsed_args.pattern, parsed_args.seeing, parsed_args.template, parsed_args.template))
+    files = glob.glob("{}/result_{}_dithers{}_seeing{}_*-*offset*_*_template{}.fits".format(folder, parsed_args.pattern, parsed_args.dithers, parsed_args.seeing, parsed_args.template, parsed_args.template))
     print(files)
-    print("{}/result_{}_seeing{}_*-randoffset{}_*_template{}.fits".format(folder, parsed_args.pattern, parsed_args.seeing, parsed_args.template, parsed_args.template))
-    if len(files) != 4: 
+    print("{}/result_{}_dithers{}_seeing{}_*-*offset*_*_template{}.fits".format(folder, parsed_args.pattern, parsed_args.dithers, parsed_args.seeing, parsed_args.template, parsed_args.template))
+    if len(files) < 9:# or len(files) != 10: 
         print("there is a problem with the given set of arguments for {}".format(folder))
         print(len(files))
         continue
@@ -41,9 +43,9 @@ for folder in folder_list:
         table_to_add = Table(hdus[1].data)
         table = vstack([table, table_to_add])
         hdus.close()
-    new_filename = "_".join(files[0].split("_")[:5])+"_combined_"+"_".join(files[0].split("_")[6:])
+    new_filename = "_".join(files[0].split("_")[:-2])+"_combined_"+files[0].split("_")[-1]
     print("merging files into: {}".format(new_filename))
-    table.write(new_filename, format="fits")
-
+    #table.write(new_filename, format="fits")
+    break
     #import time
     #time.sleep(120)
