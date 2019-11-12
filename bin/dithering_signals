@@ -40,8 +40,8 @@ def run_simulation_triangulate(dithering, source, source_id, random_seeing_offse
     x_offset = tabled_x_offsets[source_id]
     y_offset = tabled_y_offsets[source_id]
 
-    print("Offsets are set to: ", x_offset, y_offset)
-    print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
+    #print("Offsets are set to: ", x_offset, y_offset)
+    #print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
     
     if pos_rms > 0:
         pos_x_err = np.random.normal(loc=0, scale=pos_rms, size=num_dithers)
@@ -184,8 +184,8 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         pos_x_err = np.zeros(num_dithers)
         pos_y_err = np.zeros(num_dithers)
 
-    print("Offsets are set to: ", x_offset, y_offset)
-    print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
+    #print("Offsets are set to: ", x_offset, y_offset)
+    #print("Focal coordinate: ", tabled_x_pos[source_id], tabled_y_pos[source_id])
         
     dithering.set_focal_position_simple(tabled_x_pos[source_id], tabled_y_pos[source_id])
     dithering.place_fiber([x_offset, y_offset])
@@ -215,8 +215,8 @@ def run_simulation_rectangular(dithering, source, source_id, random_seeing_offse
         SNR.append([np.median(dithering.SNR['b'][0]), np.median(dithering.SNR['r'][0]), np.median(dithering.SNR['z'][0])])
         signal.append([np.sum(dithering.signal['b'][0]), np.sum(dithering.signal['r'][0]), np.sum(dithering.signal['z'][0])])
         signal_noise.append([np.sqrt(np.sum(dithering.signal_noise['b'][0]**2)),
-                         np.sqrt(np.sum(dithering.signal_noise['r'][0]**2)),
-                         np.sqrt(np.sum(dithering.signal_noise['z'][0]**2))])
+                             np.sqrt(np.sum(dithering.signal_noise['r'][0]**2)),
+                             np.sqrt(np.sum(dithering.signal_noise['z'][0]**2))])
         x.append(x_pos_moves[i]+pos_x_err[i])
         y.append(y_pos_moves[i]+pos_y_err[i])
         fluxvars.append(curr_fluxvar)
@@ -412,6 +412,7 @@ for i in range(num_pointings):
             focal_y  = tabled_y_pos[j]
 
             dithering_pure.set_focal_position_simple(tabled_x_pos[j], tabled_y_pos[j])
+            dithering_pure.place_fiber([0., 0.])
             dithering_pure.set_theta_0(-5.*u.deg)
             dithering_pure.set_phi_0(10.*u.deg)
             dithering_pure.run_simulation(source_type, *source, report=False, \
