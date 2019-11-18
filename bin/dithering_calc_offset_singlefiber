@@ -209,8 +209,7 @@ if verbose:
     print(" - starting the optimization using LM algorith")
     
 solution = opt.root(residuals_singlefiber, initial_guess, args=(b), method='lm',
-                    options={'factor': 100., 'gtol': 1e-12, 'ftol': 1e-12,  'eps': 1e-3, 'diag': 10*np.ones(len(initial_guess))})
-#residuals_singlefiber(solution.x, b)
+                    options={'factor': 100., 'gtol': 1e-8, 'ftol': 1e-8,  'eps': 1e-3, 'diag': 10*np.ones(len(initial_guess))})
 
 if verbose:
     print(" - solved offsets are ({:.3f}, {:.3f}) um".format(*(solution.x[-2:]*200)))
@@ -253,6 +252,25 @@ if is_plot:
     plt.ylabel("y dither movement [um]")
     plt.show()
 
+try:
+    with open(output, 'r') as fid:
+        results = yaml.full_load(open(output, "r"))
+except:
+    results = {}
 
+print(results)
+print(type(results))
 
+results['{}'.format(selected_fiber)] = {}
+results['{}'.format(selected_fiber)] = {'focal_x': float(focal_xs[0][selected_fiber]),
+                                        'focal_y': float(focal_ys[0][selected_fiber]),
+                                        'known_offset_x': float(input_offset_x),
+                                        'known_offset_y': float(input_offset_y),
+                                        'calc_offset_x': float(solution.x[-2]*200.),
+                                        'calc_offset_y': float(solution.x[-1]*200.),
+                                        'simulation_filename': filenames[0]}
 
+print(results)
+
+with open(output, "w") as fid:
+    fid.write(yaml.dump(results))
