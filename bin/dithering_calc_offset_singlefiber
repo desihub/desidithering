@@ -215,10 +215,10 @@ solution = opt.root(residuals_singlefiber, initial_guess, args=(b), method='lm',
 if verbose:
     print(" - solved offsets are ({:.3f}, {:.3f}) um".format(*(solution.x[-2:]*200)))
     print(" - input offsets are  ({:.3f}, {:.3f}) um".format(input_offset_x, input_offset_y))
-    relative_error = [ 1.-solution.x[-2]*200./input_offset_x,
-                       1.-solution.x[-1]*200./input_offset_y ]
-    relative_error_angle = relative_error/1e3 * 70.35
+    relative_error = np.asarray([ 1.-solution.x[-2]*200./input_offset_x,
+                                  1.-solution.x[-1]*200./input_offset_y ])
     print(" - relative error: ({:.3f}, {:.3f}) um".format(*relative_error))
+    relative_error_angle = relative_error/1e3 * 70.35
     print(" -               : ({:.3f}, {:.3f}) arcsec".format(*relative_error_angle))
     
 r_fit = fitting_function_singlefiber(solution.x)
