@@ -1,0 +1,258 @@
+#!/bin/env python
+
+import astropy.units as u
+import numpy as np
+import yaml
+import random
+import math
+import sys
+import os
+import scipy.optimize as opt
+from scipy.interpolate import interp2d
+import matplotlib.pyplot as plt
+
+from astropy.io import fits
+from astropy import table
+
+from desidithering import dithering as Dithering
+import argparse
+import time
+
+import pickle
+
+from sklearn.neighbors import KDTree
+
+parser = argparse.ArgumentParser(description='Script to solve the offsets of a single fiber')
+parser.add_argument("--step_size", dest='stepsize', type=float, required=True,
+                    help='Step size to use for the use')
+parser.add_argument("--seeing_offsets_rms", dest='seeing_offset', type=str, required=True,
+                    help='Seeing change RMS')
+parser.add_argument("--fiber_index", dest='selected_fiber', type=int, required=True,
+                    help='Fiber id in the fits file')
+parser.add_argument("--pattern", dest='pattern', type=int, default=2, choices=(0, 1, 2),
+                    help='Dithering pattern to use [0:triangulation, 1: rectange grid, 2: random pattern]')
+parser.add_argument("--prefix", dest='prefix', type=str, required=True,
+                    help='Directory path for the input simulations')
+parser.add_argument("--num_dithers", dest='num_dithers', type=int, default=10, choices=(5, 10, 15),
+                    help='Number of dithers in the suimulation')
+parser.add_argument("--template", dest='template', default=10, required=True,
+                    help='Template number used for the simulations')
+parser.add_argument("--output", dest='output', type=str, required=True,
+                    help='Output filename')
+parser.add_argument("--plot", dest='is_plot', type=int, default=0, choices=(0, 1),
+                    help='Flag to plot diagnostics figures')
+parser.add_argument("--verbose", type=int, default=0,
+                    help='Verbosity for the diagnostic outputs')
+parsed_args = parser.parse_args()
+
+global selected_fiber
+global num_dithers
+global dithering
+global source
+
+pattern_LUT = {0:'triangular', 1:'rectangle', 2:'random'}
+
+stepsize = parsed_args.stepsize
+seeing_offset_rms = parsed_args.seeing_offset
+selected_fiber = parsed_args.selected_fiber
+pattern = parsed_args.pattern
+num_dithers = parsed_args.num_dithers
+output = parsed_args.output
+prefix = parsed_args.prefix
+template = parsed_args.template
+is_plot = parsed_args.is_plot
+verbose = parsed_args.verbose
+
+config_file = "config/desi-blur-wlenoffset-norandoffset.yaml"
+
+filenames = []
+filenames.append("{}/{:.1f}um/result_{}_dithers{}_seeing{}_blur_wlenoffset-norandoffset_combined_template{}.fits".format(prefix,
+                                                                                                                         stepsize,
+                                                                                                                         pattern_LUT[pattern],
+                                                                                                                         num_dithers,
+                                                                                                                         seeing_offset_rms,
+                                                                                                                         template))
+
+hdus = fits.open(filenames[0])
+data = hdus[1].data
+
+if is_plot:
+    plt.figure(figsize=(10,10))
+    plt.quiver(data['focal_x'], data['focal_y'],
+               data['known_offset_x'], data['known_offset_y'],
+               np.sqrt(data['known_offset_x']**2+ data['known_offset_y']**2))
+    plt.gca().set_aspect(True)
+    plt.xlim(-450, 450)
+    plt.ylim(-450, 450)
+    plt.colorbar()
+    plt.show()
+
+dithering_pos_xs = {}
+dithering_pos_ys = {}
+fiber_ids        = {}
+calc_signals     = {}
+calc_signals_err = {}
+focal_xs         = {}
+focal_ys         = {}
+known_offsets_x  = {}
+known_offsets_y  = {}
+
+# tables corresponding to the files
+for i, filename in enumerate(filenames):
+    hdus = fits.open(filename)
+    dithering_pos_xs[i] = hdus[1].data['dither_pos_x']
+    dithering_pos_ys[i] = hdus[1].data['dither_pos_y']
+    fiber_ids[i]        = hdus[1].data['fiber_ids']
+    calc_signals[i]     = hdus[1].data['calc_signals_b']
+    calc_signals_err[i] = hdus[1].data['calc_signals_noise_b']
+    focal_xs[i]         = hdus[1].data['focal_x']
+    focal_ys[i]         = hdus[1].data['focal_y']
+    known_offsets_x[i]  = hdus[1].data['known_offset_x']
+    known_offsets_y[i]  = hdus[1].data['known_offset_y']
+    del hdus
+
+f_ins   = data['f_in']
+w_first = 3500.0
+w_last  = 10000.0
+w_len   = len(f_ins[0])
+w_in    = np.linspace(w_first, w_last, w_len)
+
+# no need for this part anymore
+#focal_coordinates = np.vstack((focal_xs[0], focal_ys[0])).T
+#tree = KDTree(focal_coordinates, leaf_size=4)
+
+number_of_fibers = len(dithering_pos_xs[0]) # not really gives the correct number because of the empty entries
+number_of_dithers = len(dithering_pos_xs[0][0])*len(dithering_pos_xs)
+
+def fitting_function_singlefiber(parameters):
+    # parameters:
+    # parameters[0] -> seeing offset for exposure 0
+    # parameters[1] -> seeing offset for exposure 1
+    # parameters[N] -> seeing offset for exposure N-1
+    # parameters[N+1:N+2] -> (x, y) offsets for fiber
+    number_of_equations = len(parameters) if len(parameters)>=number_of_dithers else number_of_dithers
+    results = np.zeros(number_of_equations)
+    out_of_bounds_increment = 0
+    for curr_equation in range(number_of_equations):
+        curr_focal_x_ = focal_xs[0][selected_fiber]
+        curr_focal_y_ = focal_ys[0][selected_fiber]
+        try:
+            curr_x_   = dithering_pos_xs[0][selected_fiber][curr_equation]
+            curr_y_   = dithering_pos_ys[0][selected_fiber][curr_equation]
+            curr_seeing_change_ = parameters[curr_equation]
+            curr_offset_x_      = parameters[-2]*200
+            curr_offset_y_      = parameters[-1]*200
+            if (curr_seeing_change_ <=0.1) and (curr_seeing_change_>=-0.1):
+                dithering.place_fiber([curr_x_ + curr_offset_x_,
+                                       curr_y_ + curr_offset_y_])
+                dithering.run_simulation('qso', *source, report=False,
+                                         seeing_fwhm_ref_offset=curr_seeing_change_*u.arcsec,
+                                         airmass_offset=1e-12)
+                results[curr_equation] = np.sum(dithering.signal['b'][0])/max_signal
+            else:
+                results[curr_equation] = 1e25
+        except:
+            curr_x_   = dithering_pos_xs[0][selected_fiber][-8+out_of_bounds_increment]
+            curr_y_   = dithering_pos_ys[0][selected_fiber][-8+out_of_bounds_increment]
+            curr_seeing_change_ = parameters[-8+out_of_bounds_increment]
+            out_of_bounds_increment += 1 
+            curr_offset_x_      = parameters[-2]*200
+            curr_offset_y_      = parameters[-1]*200
+            if (curr_seeing_change_ <=0.1) and (curr_seeing_change_>=-0.1):
+                dithering.place_fiber([curr_x_ + curr_offset_x_,
+                                       curr_y_ + curr_offset_y_])
+                dithering.run_simulation('qso', *source, report=False,
+                                         seeing_fwhm_ref_offset=curr_seeing_change_*u.arcsec,
+                                         airmass_offset=1e-12)
+                results[curr_equation] = np.sum(dithering.signal['b'][0])/max_signal
+    return results.astype(np.float64)
+
+def residuals_singlefiber(parameters, b):
+    return fitting_function_singlefiber(parameters) - b
+
+if verbose:
+    print("Running the analysis for the fiber at ({},{})mm".format(focal_xs[0][selected_fiber], focal_ys[0][selected_fiber]))
+
+#initial guess
+x_est = -np.sum(data['dither_pos_x'][selected_fiber]*(data['calc_signals_b'][selected_fiber]))/np.sum((data['calc_signals_b'][selected_fiber]))/200.
+y_est = -np.sum(data['dither_pos_y'][selected_fiber]*(data['calc_signals_b'][selected_fiber]))/np.sum((data['calc_signals_b'][selected_fiber]))/200.
+seeing_changes = np.empty(number_of_dithers)
+seeing_changes.fill(0.00001)
+initial_guess = np.asarray([*seeing_changes, x_est, y_est]).astype(np.float64)
+
+if verbose:
+    print(" - initial guess for offsets: ({:.3f}, {:.3f})um".format(*(initial_guess[-2:]*200)))#, initial_guess[-1]*200))
+
+# signals for the selected fiber with some extra elements for the solver
+global max_signal
+xtra_elements = np.empty(len(initial_guess)-len(data['calc_signals_b'][selected_fiber]))
+xtra_elements.fill(1e25)
+max_signal = data['calc_signals_b'][selected_fiber].max()
+b = np.asarray([*data['calc_signals_b'][selected_fiber]/max_signal, 
+                data['calc_signals_b'][selected_fiber][-8]/max_signal,
+                data['calc_signals_b'][selected_fiber][-7]/max_signal]).astype(np.float64)
+
+if verbose:
+    print(" - normalizing the signals with maximum value of {} pe".format(max_signal))
+
+input_offset_x = known_offsets_x[0][selected_fiber]
+input_offset_y = known_offsets_y[0][selected_fiber]
+
+# define the dithering instance for the optimization
+dithering = Dithering.dithering(config_file=config_file)
+dithering.desi.source.update_in("bright star", 'star', w_in*u.angstrom, f_ins[selected_fiber]*1e-17*u.erg/(u.angstrom*u.cm*u.cm*u.s))
+dithering.desi.source.update_out()
+source = dithering.generate_source(disk_fraction=0., bulge_fraction=0., half_light_disk=0., half_light_bulge=0.)
+dithering.set_focal_position_simple(focal_xs[0][selected_fiber], focal_ys[0][selected_fiber])
+
+if verbose:
+    print(" - starting the optimization using LM algorith")
+    
+solution = opt.root(residuals_singlefiber, initial_guess, args=(b), method='lm',
+                    options={'factor': 100., 'gtol': 1e-12, 'ftol': 1e-12,  'eps': 1e-3, 'diag': 10*np.ones(len(initial_guess))})
+#residuals_singlefiber(solution.x, b)
+
+if verbose:
+    print(" - solved offsets are ({:.3f}, {:.3f}) um".format(*(solution.x[-2:]*200)))
+    print(" - input offsets are  ({:.3f}, {:.3f}) um".format(input_offset_x, input_offset_y))
+    relative_error = [ 1.-solution.x[-2]*200./input_offset_x,
+                       1.-solution.x[-1]*200./input_offset_y ]
+    relative_error_angle = relative_error/1e3 * 70.35
+    print(" - relative error: ({:.3f}, {:.3f}) um".format(*relative_error))
+    print(" -               : ({:.3f}, {:.3f}) arcsec".format(*relative_error_angle))
+    
+r_fit = fitting_function_singlefiber(solution.x)
+r_guess = fitting_function_singlefiber(initial_guess)
+r_zero = fitting_function_singlefiber(np.asarray([1e-12,1e-12,1e-12,1e-12,1e-12,1e-12,1e-12,1e-12,1e-12,1e-12,
+                                                  input_offset_x/200, input_offset_y/200]))
+
+if verbose:
+    print("signals with fit values: ", r_fit)
+    print("signals at zero point:", r_zero)
+    print("signals with initial guess: ", r_guess)
+    print("signals measured:", b)
+    print("difference in fit and measured signals: ", (r_fit-b)/b)
+    print("difference in measured and zero signals: ", (b-r_zero)/b)
+
+if is_plot:
+    interpolator_distance = 30
+    plt.scatter(data['dither_pos_x'][selected_fiber], data['dither_pos_y'][selected_fiber], 
+                c=np.log10(data['calc_signals_b'][selected_fiber]))
+
+    x_est = np.sum(data['dither_pos_x'][selected_fiber]*(data['calc_signals_b'][selected_fiber]))/np.sum((data['calc_signals_b'][selected_fiber]))
+    y_est = np.sum(data['dither_pos_y'][selected_fiber]*(data['calc_signals_b'][selected_fiber]))/np.sum((data['calc_signals_b'][selected_fiber]))
+    plt.plot(x_est, y_est, 'x', color='red')
+    plt.plot(-solution.x[-2]*200., -solution.x[-1]*200., 'd', color='magenta')
+
+    plt.colorbar(label="Total # of PE (in log)")
+    plt.grid(True, alpha=.2)
+    plt.xlim(-100, 100)
+    plt.ylim(-100, 100)
+    plt.gca().set_aspect(True)
+    plt.xlabel("x dither movement [um]")
+    plt.ylabel("y dither movement [um]")
+    plt.show()
+
+
+
+
